@@ -1,170 +1,117 @@
 # SimpleLLMs - Simple LLM Suite
 
-> **Five Specialized Agents for Autonomous Development**
+### Five Specialized Autonomous Agents for Claude Code
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
 [![Claude Code](https://img.shields.io/badge/Claude-Code-purple)](https://claude.ai/claude-code)
 
-SimpleLLMs implements the autonomous loop pattern for Claude Code, extending the R.A.L.P.H. methodology with five specialized agent behaviors.
+**SimpleLLMs** is a suite of agentic behaviors designed to transform Claude Code from a chat interface into a production-grade autonomous engineering team.
+
+Inspired by the [original R.A.L.P.H. pattern](https://github.com/snarktank/ralph), this suite introduces specialized logic loops for research, creative pivoting, system integration, and massive-scale processing.
 
 ---
 
-## Attribution
+## The Cognitive Pipeline
 
-Inspired by [snarktank/ralph](https://github.com/snarktank/ralph) ([ghuntley.com/ralph](https://ghuntley.com/ralph))
+Unlike standard "blind loops," SimpleLLMs agents are **grounded**.
 
-Integrates with [NotebookLM MCP](https://github.com/PleasePrompto/notebooklm-mcp)
-
----
-
-## The Agents
-
-| Agent | Acronym | Philosophy | Best For |
-|-------|---------|------------|----------|
-| [**R.A.L.P.H.**](https://github.com/midnightnow/ralph-plugin) | Retry And Loop Persistently until Happy | Blind persistence | Simple retry loops |
-| [**B.A.R.T.**](https://github.com/midnightnow/bart-plugin) | Branch Alternative Retry Trees | Creative chaos | Breaking through blocks |
-| [**L.I.S.A.**](https://github.com/midnightnow/lisa-plugin) | Lookup, Investigate, Synthesize, Act | Research + quality | Production code |
-| [**M.A.R.G.E.**](https://github.com/midnightnow/marge-plugin) | Maintain Adapters, Reconcile, Guard Execution | Organize chaos | Integration & cleanup |
-| [**H.O.M.E.R.**](https://github.com/midnightnow/homer-plugin) | Harness Omni-Mode Execution Resources | Parallel volume | Speed & throughput |
+1. **Grounded Synthesis**: Integrate with [NotebookLM MCP](https://github.com/PleasePrompto/notebooklm-mcp) to distill project documentation, PDFs, and whitepapers into a "Source of Truth."
+2. **Specialized Execution**: Select the agent behavior that matches your current bottleneck (e.g., Use **L.I.S.A.** for research-heavy features or **B.A.R.T.** for creative debugging).
 
 ---
 
-## Architecture
+## Meet the Family
+
+| Agent | Acronym | Role | Best For |
+|-------|---------|------|----------|
+| **L.I.S.A.** | **L**ookup, **I**nvestigate, **S**ynthesize, **A**ct | Research | Grounding code in docs via NotebookLM |
+| **B.A.R.T.** | **B**ranch **A**lternative **R**etry **T**rees | Innovation | Breaking through blocks with creative pivots |
+| **M.A.R.G.E.** | **M**aintain **A**dapters, **R**econcile, **G**uard **E**xecution | Integration | Merging complex systems and safety checks |
+| **H.O.M.E.R.** | **H**arness **O**mni-Mode **E**xecution **R**esources | Scale | Batch processing and massive codebase refactors |
+| **R.A.L.P.H.** | **R**etry **A**nd **L**oop **P**ersistently until **H**appy | Persistence | Standard "keep trying until it passes" loops |
+
+---
+
+## Repositories
+
+| Agent | Repository | Description |
+|-------|------------|-------------|
+| **L.I.S.A.** | [lisa-agent](https://github.com/midnightnow/lisa-agent) | Research-first development engine |
+| **B.A.R.T.** | [bart-agent](https://github.com/midnightnow/bart-agent) | Creative pivot and branching logic |
+| **M.A.R.G.E.** | [marge-agent](https://github.com/midnightnow/marge-agent) | Safety guardian and system reconciler |
+| **H.O.M.E.R.** | [homer-agent](https://github.com/midnightnow/homer-agent) | High-throughput parallel processing |
+| **R.A.L.P.H.** | [snarktank/ralph](https://github.com/snarktank/ralph) | The original autonomous loop (upstream) |
+
+---
+
+## Quick Start
+
+### 1. Install Individual Agents
+
+```bash
+# Clone and install any agent
+git clone https://github.com/midnightnow/lisa-agent.git
+cd lisa-agent && ./install.sh
+```
+
+### 2. Connect Your Knowledge Base
+
+Follow the [NotebookLM MCP Setup Guide](https://github.com/PleasePrompto/notebooklm-mcp) to ground your agents in your documentation.
+
+### 3. Run Your First Loop
+
+```bash
+# Research-first development
+simplellms --lisa "Implement the new authentication service"
+
+# Creative problem solving
+simplellms --bart "Find a way around this dependency conflict"
+
+# System integration
+simplellms --marge "Reconcile these three microservices"
+
+# Batch processing
+simplellms --homer "Refactor all components to TypeScript strict mode"
+```
+
+---
+
+## When to Use Each Agent
 
 ```
 ┌─────────────────────────────────────────────────────────────────┐
-│                     SIMPLLMS ARCHITECTURE                        │
+│                    SIMPLELLMS DECISION TREE                      │
 ├─────────────────────────────────────────────────────────────────┤
 │                                                                  │
-│  ┌─────────────┐     ┌─────────────┐     ┌─────────────┐        │
-│  │   Claude    │────▶│  SimpleLLMs   │────▶│    Code     │        │
-│  │    Code     │     │   Agents    │     │   Output    │        │
-│  └─────────────┘     └──────┬──────┘     └─────────────┘        │
-│                             │                                    │
-│                             ▼                                    │
-│                    ┌─────────────────┐                          │
-│                    │  NotebookLM MCP │                          │
-│                    │  (Research Layer)│                          │
-│                    └─────────────────┘                          │
-│                             │                                    │
-│                             ▼                                    │
-│                    ┌─────────────────┐                          │
-│                    │ Your Documents  │                          │
-│                    │ (Zero Hallucination)                       │
-│                    └─────────────────┘                          │
+│  "What's blocking you?"                                          │
+│                                                                  │
+│  ├── Need to understand before coding?                           │
+│  │   └── L.I.S.A. → Research first, then implement              │
+│  │                                                               │
+│  ├── Stuck on the same error repeatedly?                         │
+│  │   └── B.A.R.T. → Creative pivots and alternative paths       │
+│  │                                                               │
+│  ├── Multiple systems fighting each other?                       │
+│  │   └── M.A.R.G.E. → Reconcile and guard execution             │
+│  │                                                               │
+│  ├── Need to process massive codebase fast?                      │
+│  │   └── H.O.M.E.R. → Parallel batch operations                 │
+│  │                                                               │
+│  └── Simple task, just need persistence?                         │
+│      └── R.A.L.P.H. → Loop until it works                       │
 │                                                                  │
 └─────────────────────────────────────────────────────────────────┘
 ```
 
 ---
 
-## Quick Install
+## Attribution & Lineage
 
-```bash
-# Install all agents
-curl -fsSL https://raw.githubusercontent.com/midnightnow/ralph-family-plugins/main/install.sh | bash
+SimpleLLMs implements and extends the autonomous loop pattern pioneered by:
 
-# Or install individually
-git clone https://github.com/midnightnow/ralph-plugin.git && cd ralph-plugin && ./install.sh
-git clone https://github.com/midnightnow/bart-plugin.git && cd bart-plugin && ./install.sh
-git clone https://github.com/midnightnow/lisa-plugin.git && cd lisa-plugin && ./install.sh
-git clone https://github.com/midnightnow/marge-plugin.git && cd marge-plugin && ./install.sh
-git clone https://github.com/midnightnow/homer-plugin.git && cd homer-plugin && ./install.sh
-```
-
----
-
-## NotebookLM Integration
-
-SimpleLLMs leverages [NotebookLM MCP](https://github.com/PleasePrompto/notebooklm-mcp) for grounded research:
-
-```bash
-# Install NotebookLM MCP
-claude mcp add notebooklm npx notebooklm-mcp@latest
-
-# L.I.S.A. automatically queries your documentation
-simplellms --lisa "Implement the authentication system"
-```
-
-| Agent | NotebookLM Usage |
-|-------|------------------|
-| **R.A.L.P.H.** | None (blind persistence) |
-| **B.A.R.T.** | Optional (creative research) |
-| **L.I.S.A.** | **Primary** (research-first) |
-| **M.A.R.G.E.** | Optional (integration docs) |
-| **H.O.M.E.R.** | Batch queries |
-
----
-
-## Usage
-
-### The Orchestrator
-
-```bash
-# Let the orchestrator decide
-simplellms "Fix the failing tests"           # → R.A.L.P.H.
-simplellms "I'm stuck, nothing works"        # → B.A.R.T.
-simplellms "Build a new feature properly"   # → L.I.S.A.
-simplellms "Make these systems work together" # → M.A.R.G.E.
-simplellms "Process entire codebase fast"   # → H.O.M.E.R.
-
-# Or specify directly
-simplellms --ralph "Retry until tests pass"
-simplellms --bart "Find a creative solution"
-simplellms --lisa "Research and implement properly"
-simplellms --marge "Clean up this mess"
-simplellms --homer "Batch process everything"
-```
-
-### Sequential Workflow
-
-For complex projects, use agents in sequence:
-
-```bash
-simplellms --ralph "Get the basic feature working"
-simplellms --bart "We're stuck on the edge case"
-simplellms --lisa "Add tests and documentation"
-simplellms --marge "Integrate with existing systems"
-simplellms --homer "Apply pattern across all modules"
-```
-
----
-
-## Configuration
-
-Global config at `~/.simplellmsrc`:
-
-```json
-{
-  "default_agent": "lisa",
-  "orchestrator_enabled": true,
-  "notebooklm_integration": true,
-  "max_iterations": {
-    "ralph": 30,
-    "bart": 20,
-    "lisa": 15,
-    "marge": 30,
-    "homer": 50
-  }
-}
-```
-
----
-
-## Agent Comparison
-
-| Feature | R.A.L.P.H. | B.A.R.T. | L.I.S.A. | M.A.R.G.E. | H.O.M.E.R. |
-|---------|------------|----------|----------|------------|------------|
-| Persistence | ⭐⭐⭐ | ⭐⭐⭐ | ⭐⭐ | ⭐⭐⭐ | ⭐⭐⭐ |
-| Creativity | ⭐ | ⭐⭐⭐ | ⭐⭐ | ⭐⭐ | ⭐ |
-| Quality | ⭐ | ⭐ | ⭐⭐⭐ | ⭐⭐ | ⭐⭐ |
-| Speed | ⭐⭐ | ⭐⭐ | ⭐ | ⭐⭐ | ⭐⭐⭐ |
-| Integration | ⭐ | ⭐ | ⭐ | ⭐⭐⭐ | ⭐⭐ |
-| Parallelism | ⭐ | ⭐ | ⭐ | ⭐ | ⭐⭐⭐ |
-
----
-
-## Lineage
+- [Geoffrey Huntley's Ralph Concept](https://ghuntley.com/ralph/)
+- [snarktank/ralph](https://github.com/snarktank/ralph) (Amp CLI implementation)
+- [NotebookLM MCP](https://github.com/PleasePrompto/notebooklm-mcp) (Research grounding)
 
 ```
 ghuntley.com/ralph (Concept)
@@ -183,24 +130,11 @@ SimpleLLMs (Claude Code Extension)
 
 ---
 
-## Contributing
-
-Each agent has its own repository. PRs welcome!
-
-- [ralph-plugin](https://github.com/midnightnow/ralph-plugin)
-- [bart-plugin](https://github.com/midnightnow/bart-plugin)
-- [lisa-plugin](https://github.com/midnightnow/lisa-plugin)
-- [marge-plugin](https://github.com/midnightnow/marge-plugin)
-- [homer-plugin](https://github.com/midnightnow/homer-plugin)
-
----
-
 ## License
 
-MIT - Use freely.
+MIT - Use freely. Build faster. Loop with purpose.
 
 ---
 
 *SimpleLLMs - Simple LLM Suite*
 *Five agents, one powerful workflow.*
-*Grounded by NotebookLM. Inspired by R.A.L.P.H.*
