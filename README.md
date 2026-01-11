@@ -30,6 +30,8 @@ Unlike standard "blind loops," SimpleLLMs agents are **grounded**.
 | **H.O.M.E.R.** | **H**arness **O**mni-Mode **E**xecution **R**esources | Scale | Batch processing and massive codebase refactors |
 | **R.A.L.P.H.** | **R**etry **A**nd **L**oop **P**ersistently until **H**appy | Persistence | Standard "keep trying until it passes" loops |
 
+<img width="1184" height="864" alt="image" src="https://github.com/user-attachments/assets/3f59bbee-1d61-4510-a436-45f814b29f12" />
+
 ---
 
 ## Repositories
