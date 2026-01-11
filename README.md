@@ -1,4 +1,5 @@
 # SimpleLLMs - Simple LLM Suite
+<img width="1024" height="747" alt="image" src="https://github.com/user-attachments/assets/60c0da7d-fbb3-4865-8979-f4d19b14df5d" />
 
 ### Five Specialized Autonomous Agents for Claude Code
 
@@ -9,7 +10,6 @@
 
 Inspired by the [original R.A.L.P.H. pattern](https://github.com/snarktank/ralph), this suite introduces specialized logic loops for research, creative pivoting, system integration, and massive-scale processing.
 
-![SimpleLLMs Blackboard](https://github.com/user-attachments/assets/3ae0bead-b9d4-4b5c-a318-b08e23036bfe)
 ---
 
 ## The Cognitive Pipeline
@@ -30,6 +30,10 @@ Unlike standard "blind loops," SimpleLLMs agents are **grounded**.
 | **M.A.R.G.E.** | **M**aintain **A**dapters, **R**econcile, **G**uard **E**xecution | Integration | Merging complex systems and safety checks |
 | **H.O.M.E.R.** | **H**arness **O**mni-Mode **E**xecution **R**esources | Scale | Batch processing and massive codebase refactors |
 | **R.A.L.P.H.** | **R**etry **A**nd **L**oop **P**ersistently until **H**appy | Persistence | Standard "keep trying until it passes" loops |
+
+---
+
+<img width="1078" height="793" alt="Screenshot 2026-01-11 at 12 11 19 pm" src="https://github.com/user-attachments/assets/ec081756-7657-4d3b-83c4-6672fd326e19" />
 
 ---
 
