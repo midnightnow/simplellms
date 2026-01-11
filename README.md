@@ -1,5 +1,5 @@
 # SimpleLLMs - Simple LLM Suite
-<img width="1024" height="747" alt="image" src="https://github.com/user-attachments/assets/60c0da7d-fbb3-4865-8979-f4d19b14df5d" />
+<img width="1078" height="793" alt="Screenshot 2026-01-11 at 12 11 19 pm" src="https://github.com/user-attachments/assets/47dce665-d866-4792-bd60-1b405d8e64e2" />
 
 ### Five Specialized Autonomous Agents for Claude Code
 
@@ -30,10 +30,6 @@ Unlike standard "blind loops," SimpleLLMs agents are **grounded**.
 | **M.A.R.G.E.** | **M**aintain **A**dapters, **R**econcile, **G**uard **E**xecution | Integration | Merging complex systems and safety checks |
 | **H.O.M.E.R.** | **H**arness **O**mni-Mode **E**xecution **R**esources | Scale | Batch processing and massive codebase refactors |
 | **R.A.L.P.H.** | **R**etry **A**nd **L**oop **P**ersistently until **H**appy | Persistence | Standard "keep trying until it passes" loops |
-
----
-
-<img width="1078" height="793" alt="Screenshot 2026-01-11 at 12 11 19 pm" src="https://github.com/user-attachments/assets/ec081756-7657-4d3b-83c4-6672fd326e19" />
 
 ---
 
