@@ -18,7 +18,7 @@ While all SimpleLLMs are model-selectable, they are rooted in the "DNA" of their
 
 ### 🏛️ The Clinicals (Claude-Native)
 *Precision, Reasoning, & User Experience*
-- **L.I.S.A., B.A.R.T., M.A.R.G.E., C.L.A.U.D.O.G.**
+- **L.I.S.A., B.A.R.T., M.A.R.G.E.**
 - **Strengths**: Deep reasoning, nuanced refactoring, empathetic UI/UX, and complex decision-making.
 
 ### ⚡ The Industrials (Gemini-Native)
@@ -41,8 +41,13 @@ Unlike standard "blind loops," SimpleLLMs agents are **grounded**.
 | **B.A.R.T.** | Claude | Innovation | [bart-agent](https://github.com/midnightnow/bart-agent) | Breaking through blocks with creative pivots |
 | **M.A.R.G.E.** | Claude | Integration | [marge-agent](https://github.com/midnightnow/marge-agent) | Merging systems and heavy refactoring |
 | **H.O.M.E.R.** | Gemini | Scale | [homer-agent](https://github.com/midnightnow/homer-agent) | Massive-scale processing and parallel tasks |
-| **H.O.U.N.D.** | Gemini | Security | [hound-agent](https://github.com/midnightnow/hound-agent) | Adversarial testing & exploits (**H.O.U.N.D.** / **C.L.A.U.D.O.G.** best friend pairing) |
+| **H.O.U.N.D.** | Gemini | Security | [hound-agent](https://github.com/midnightnow/hound-agent) | Adversarial testing & exploits |
 | **M.A.G.G.I.E.** | Gemini | Compliance | [maggie-agent](https://github.com/midnightnow/maggie-agent) | Human-in-the-loop oversight & SOP enforcement |
+
+### 🛠️ Ecosystem Utilities
+
+| Utility | DNA Engine | Role | Repository | Best For |
+|---------|------------|------|------------|----------|
 | **C.L.A.U.D.O.G.** | Claude | QA | [claudog](https://github.com/midnightnow/claudog) | Gamified bug hunting and web testing |
 | **Blackboard** | Shared | Governance | [simplellms-blackboard](https://github.com/midnightnow/simplellms-blackboard) | Registry of anti-patterns and memory |
 | **Wiki** | Shared | Memory | [claude-code-wiki](https://github.com/midnightnow/claude-code-wiki) | Project indexing and context engine |
