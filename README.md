@@ -35,23 +35,31 @@ Unlike standard "blind loops," SimpleLLMs agents are **grounded**.
 
 ---
 
+## 🍩 The Core Ecosystem (Simpsons Family)
+
+These agents form the primary operational unit, leveraging specialized personas for specific development phases.
+
 | Agent | DNA Engine | Role | Repository | Best For |
 |-------|------------|------|------------|----------|
-| **L.I.S.A.** | Claude | Research | [lisa-agent](https://github.com/midnightnow/lisa-agent) | Understanding docs via NotebookLM |
-| **B.A.R.T.** | Claude | Innovation | [bart-agent](https://github.com/midnightnow/bart-agent) | Breaking through blocks with creative pivots |
-| **M.A.R.G.E.** | Claude | Integration | [marge-agent](https://github.com/midnightnow/marge-agent) | Merging systems and heavy refactoring |
-| **H.O.M.E.R.** | Gemini | Scale | [homer-agent](https://github.com/midnightnow/homer-agent) | Massive-scale processing and parallel tasks |
-| **H.O.U.N.D.** | Gemini | Security | [hound-agent](https://github.com/midnightnow/hound-agent) | Adversarial testing & exploits |
-| **M.A.G.G.I.E.** | Gemini | Compliance | [maggie-agent](https://github.com/midnightnow/maggie-agent) | Human-in-the-loop oversight & SOP enforcement |
+| **L.I.S.A.** | Claude | Research | [lisa-agent](https://github.com/midnightnow/lisa-agent) | Deep-diving into complex docs and NotebookLM insights |
+| **B.A.R.T.** | Claude | Innovation | [bart-agent](https://github.com/midnightnow/bart-agent) | High-entropy creative pivots and breaking through blocks |
+| **M.A.R.G.E.** | Claude | Integration | [marge-agent](https://github.com/midnightnow/marge-agent) | Large-scale refactoring and system orchestration |
+| **H.O.M.E.R.** | Gemini | Scale | [homer-agent](https://github.com/midnightnow/homer-agent) | Brute-force parallel processing and massive context handling |
+| **M.A.G.G.I.E.** | Gemini | Compliance | [maggie-agent](https://github.com/midnightnow/maggie-agent) | Human-in-the-loop oversight and SOP enforcement |
 
-### 🛠️ Ecosystem Utilities
+---
 
-| Utility | DNA Engine | Role | Repository | Best For |
-|---------|------------|------|------------|----------|
-| **C.L.A.U.D.O.G.** | Claude | QA | [claudog](https://github.com/midnightnow/claudog) | Gamified bug hunting and web testing |
-| **Blackboard** | Shared | Governance | [simplellms-blackboard](https://github.com/midnightnow/simplellms-blackboard) | Registry of anti-patterns and memory |
-| **Wiki** | Shared | Memory | [claude-code-wiki](https://github.com/midnightnow/claude-code-wiki) | Project indexing and context engine |
-| **R.A.L.P.H.** | Claude | Persistence | [snarktank/ralph](https://github.com/snarktank/ralph) | Standard "keep trying until it passes" loops |
+## 🛠️ Specialized Utility & Governance
+
+Discreet, purpose-built tools for security, quality assurance, and persistent memory.
+
+| Agent/Tool | DNA Engine | Role | Repository | Best For |
+|------------|------------|------|------------|----------|
+| **H.O.U.N.D.** | Gemini | Security | [hound-agent](https://github.com/midnightnow/hound-agent) | Adversarial testing and red-teaming exploits |
+| **C.L.A.U.D.O.G.** | Claude | QA | [claudog](https://github.com/midnightnow/claudog) | Gamified bug hunting and rigorous web-layer testing |
+| **R.A.L.P.H.** | Claude | Persistence | [snarktank/ralph](https://github.com/snarktank/ralph) | Relentless "keep trying until it passes" execution loops |
+| **Blackboard** | Shared | Governance | [simplellms-blackboard](https://github.com/midnightnow/simplellms-blackboard) | Registry of anti-patterns and cross-agent memory |
+| **Wiki** | Shared | Context | [claude-code-wiki](https://github.com/midnightnow/claude-code-wiki) | Project indexing and high-level architectural memory |
 
 ---
 
