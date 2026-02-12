@@ -1,16 +1,30 @@
 # SimpleLLMs - Simple LLM Suite
 <img width="1078" height="793" alt="Screenshot 2026-01-11 at 12 11 19 pm" src="https://github.com/user-attachments/assets/47dce665-d866-4792-bd60-1b405d8e64e2" />
 
-### Five Specialized Autonomous Agents for Claude Code
+### The Complete Autonomous Engineering Ecosystem for Claude Code
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
 [![Claude Code](https://img.shields.io/badge/Claude-Code-purple)](https://claude.ai/claude-code)
 
 **SimpleLLMs** is a suite of agentic behaviors designed to transform Claude Code from a chat interface into a production-grade autonomous engineering team.
 
-Inspired by the [original R.A.L.P.H. pattern](https://github.com/snarktank/ralph), this suite introduces specialized logic loops for research, creative pivoting, system integration, and massive-scale processing.
+Inspired by the [original R.A.L.P.H. pattern](https://github.com/snarktank/ralph), this suite introduces specialized logic loops for research, creative pivoting, system integration, security auditing, and massive-scale processing—each encoded with a specific **Model DNA** for maximum effectiveness.
 
 ---
+
+## Agentic DNA & Model Genesis 🧬
+
+While all SimpleLLMs are model-selectable, they are rooted in the "DNA" of their origin engines. This bimodal architecture ensures a perfectly balanced autonomous team.
+
+### 🏛️ The Clinicals (Claude-Native)
+*Precision, Reasoning, & User Experience*
+- **L.I.S.A., B.A.R.T., M.A.R.G.E., C.L.A.U.D.O.G.**
+- **Strengths**: Deep reasoning, nuanced refactoring, empathetic UI/UX, and complex decision-making.
+
+### ⚡ The Industrials (Gemini-Native)
+*Scale, Security, & Compliance*
+- **H.O.M.E.R., H.O.U.N.D., M.A.G.G.I.E.**
+- **Strengths**: Massive context windows (1.5M+ tokens), high-throughput parallel processing, adversarial security benchmarks, and low-latency compliance monitoring.
 
 ## The Cognitive Pipeline
 
@@ -21,27 +35,18 @@ Unlike standard "blind loops," SimpleLLMs agents are **grounded**.
 
 ---
 
-## Meet the Family
-
-| Agent | Acronym | Role | Best For |
-|-------|---------|------|----------|
-| **L.I.S.A.** | **L**ookup, **I**nvestigate, **S**ynthesize, **A**ct | Research | Grounding code in docs via NotebookLM |
-| **B.A.R.T.** | **B**ranch **A**lternative **R**etry **T**rees | Innovation | Breaking through blocks with creative pivots |
-| **M.A.R.G.E.** | **M**aintain **A**dapters, **R**econcile, **G**uard **E**xecution | Integration | Merging complex systems and safety checks |
-| **H.O.M.E.R.** | **H**arness **O**mni-Mode **E**xecution **R**esources | Scale | Batch processing and massive codebase refactors |
-| **R.A.L.P.H.** | **R**etry **A**nd **L**oop **P**ersistently until **H**appy | Persistence | Standard "keep trying until it passes" loops |
-
----
-
-## Repositories
-
-| Agent | Repository | Description |
-|-------|------------|-------------|
-| **L.I.S.A.** | [lisa-agent](https://github.com/midnightnow/lisa-agent) | Research-first development engine |
-| **B.A.R.T.** | [bart-agent](https://github.com/midnightnow/bart-agent) | Creative pivot and branching logic |
-| **M.A.R.G.E.** | [marge-agent](https://github.com/midnightnow/marge-agent) | Safety guardian and system reconciler |
-| **H.O.M.E.R.** | [homer-agent](https://github.com/midnightnow/homer-agent) | High-throughput parallel processing |
-| **R.A.L.P.H.** | [snarktank/ralph](https://github.com/snarktank/ralph) | The original autonomous loop (upstream) |
+| Agent | DNA Engine | Role | Repository | Best For |
+|-------|------------|------|------------|----------|
+| **L.I.S.A.** | Claude | Research | [lisa-agent](https://github.com/midnightnow/lisa-agent) | Understanding docs via NotebookLM |
+| **B.A.R.T.** | Claude | Innovation | [bart-agent](https://github.com/midnightnow/bart-agent) | Breaking through blocks with creative pivots |
+| **M.A.R.G.E.** | Claude | Integration | [marge-agent](https://github.com/midnightnow/marge-agent) | Merging systems and heavy refactoring |
+| **H.O.M.E.R.** | Gemini | Scale | [homer-agent](https://github.com/midnightnow/homer-agent) | Massive-scale processing and parallel tasks |
+| **H.O.U.N.D.** | Gemini | Security | [hound-agent](https://github.com/midnightnow/hound-agent) | Adversarial testing & exploits (**H.O.U.N.D.** / **C.L.A.U.D.O.G.** best friend pairing) |
+| **M.A.G.G.I.E.** | Gemini | Compliance | [maggie-agent](https://github.com/midnightnow/maggie-agent) | Human-in-the-loop oversight & SOP enforcement |
+| **C.L.A.U.D.O.G.** | Claude | QA | [claudog](https://github.com/midnightnow/claudog) | Gamified bug hunting and web testing |
+| **Blackboard** | Shared | Governance | [simplellms-blackboard](https://github.com/midnightnow/simplellms-blackboard) | Registry of anti-patterns and memory |
+| **Wiki** | Shared | Memory | [claude-code-wiki](https://github.com/midnightnow/claude-code-wiki) | Project indexing and context engine |
+| **R.A.L.P.H.** | Claude | Persistence | [snarktank/ralph](https://github.com/snarktank/ralph) | Standard "keep trying until it passes" loops |
 
 ---
 
@@ -73,6 +78,12 @@ simplellms --marge "Reconcile these three microservices"
 
 # Batch processing
 simplellms --homer "Refactor all components to TypeScript strict mode"
+
+# Security audit
+simplellms --hound "Scan this repo for vulnerabilities"
+
+# Check compliance
+simplellms --blackboard "Verify all agents are behaving"
 ```
 
 ---
@@ -97,6 +108,18 @@ simplellms --homer "Refactor all components to TypeScript strict mode"
 │  │                                                               │
 │  ├── Need to process massive codebase fast?                      │
 │  │   └── H.O.M.E.R. → Parallel batch operations                 │
+│  │                                                               │
+│  ├── Concerned about UI or UX regressions? (Claude-powered)         │
+│  │   └── C.L.A.U.D.O.G. → Playwright-driven bug hunting         │
+│  │                                                               │
+│  ├── Worried about security or exploits? (Gemini-powered)        │
+│  │   └── H.O.U.N.D. → Adversarial testing & exploits            │
+│  │                                                               │
+│  ├── Need compliance oversight or "SOP" enforcement?             │
+│  │   └── M.A.G.G.I.E. → Human-in-the-loop & Safety Guardian      │
+│  │                                                               │
+│  ├── Lost in the codebase context?                               │
+│  │   └── Wiki → Self-healing indexing & search                  │
 │  │                                                               │
 │  └── Simple task, just need persistence?                         │
 │      └── R.A.L.P.H. → Loop until it works                       │
@@ -126,7 +149,11 @@ SimpleLLMs (Claude Code Extension)
     ├── B.A.R.T.   ← + Creative pivot strategy
     ├── L.I.S.A.   ← + Research-first + NotebookLM
     ├── M.A.R.G.E. ← + Integration/cleanup focus
-    └── H.O.M.E.R. ← + Parallel batch processing
+    ├── H.O.U.N.D. ← + Adversarial security testing (Gemini Engine)
+    ├── C.L.A.U.D.O.G. ← + Playwright bug hunting (Claude Engine)
+    ├── M.A.G.G.I.E. ← + Compliance & Safety Guardian (Gemini Engine)
+    ├── Blackboard ← + Anti-pattern & Governance registry
+    └── Wiki ← + Agentic project indexing & context engine
 ```
 
 ---
@@ -137,5 +164,26 @@ MIT - Use freely. Build faster. Loop with purpose.
 
 ---
 
+---
+
+## Blackboard Governance
+
+SimpleLLMs uses a federated Blackboard system to track and enforce agent behaviors. 
+
+### Standard Anti-Pattern Template
+Every violation recorded on the board follows this structure to ensure multi-agent compatibility:
+
+```markdown
+### I WILL NOT [CONCISE_SUMMARY]
+- **Severity**: [Critical | High | Medium | Low]
+- **Agent**: [Agent Name | Universal]
+- **Context**: [Description of the failing scenario]
+- **Root Cause**: [Why the agent took this path (e.g., hallucination, missing check)]
+- **Corrected Behavior**: [What the agent MUST do instead]
+- **Evidence**: [Link to failing log or code snippet]
+```
+
+---
+
 *SimpleLLMs - Simple LLM Suite*
-*Five agents, one powerful workflow.*
+*Nine specialized agents, one powerful ecosystem.*
