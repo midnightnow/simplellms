@@ -57,7 +57,7 @@ Discreet, purpose-built tools for security, quality assurance, and persistent me
 |------------|------------|------|------------|----------|
 | **H.O.U.N.D.** | Gemini | Security | [hound-agent](https://github.com/midnightnow/hound-agent) | Adversarial testing and red-teaming exploits |
 | **C.L.A.U.D.O.G.** | Claude | QA | [claudog](https://github.com/midnightnow/claudog) | Gamified bug hunting and rigorous web-layer testing |
-| **R.A.L.P.H.** | Claude | Persistence | [snarktank/ralph](https://github.com/snarktank/ralph) | Relentless "keep trying until it passes" execution loops |
+| **R.A.L.P.H.** | Claude | Persistence | [ralph-agent](https://github.com/midnightnow/ralph-agent) | Relentless Automated Loop Processing Heuristic - "keep trying until it passes" |
 | **Blackboard** | Shared | Governance | [simplellms-blackboard](https://github.com/midnightnow/simplellms-blackboard) | Registry of anti-patterns and cross-agent memory |
 | **Wiki** | Shared | Context | [claude-code-wiki](https://github.com/midnightnow/claude-code-wiki) | Project indexing and high-level architectural memory |
 
@@ -158,7 +158,7 @@ snarktank/ralph (Amp CLI Implementation)
         │
         ▼
 SimpleLLMs (Claude Code Extension)
-    ├── R.A.L.P.H. ← Direct port of Ralph pattern
+    ├── R.A.L.P.H. ← Direct port and extension of Ralph pattern (fork of [snarktank/ralph](https://github.com/snarktank/ralph))
     ├── B.A.R.T.   ← + Creative pivot strategy
     ├── L.I.S.A.   ← + Research-first + NotebookLM
     ├── M.A.R.G.E. ← + Integration/cleanup focus

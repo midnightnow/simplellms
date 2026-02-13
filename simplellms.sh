@@ -96,12 +96,16 @@ case "${1:-}" in
         ;;
     --ralph)
         shift
-        ralph "$@"
+        if command -v ralph &> /dev/null; then
+            ralph "$@"
+        else
+            "$(dirname "$0")/../ralph-agent/ralph" "$@"
+        fi
         ;;
     --install)
         echo -e "${CYAN}Installing SimpleLLMs Suite...${NC}"
         # Trigger individual installers
-        for agent in lisa-agent bart-agent homer-agent marge-agent simplellms-blackboard hound-agent; do
+        for agent in lisa-agent bart-agent homer-agent marge-agent simplellms-blackboard hound-agent ralph-agent; do
             echo -e "Installing ${GREEN}$agent${NC}..."
             if [ -f "$(dirname "$0")/../$agent/install.sh" ]; then
                 bash "$(dirname "$0")/../$agent/install.sh"
