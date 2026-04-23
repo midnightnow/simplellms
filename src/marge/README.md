@@ -132,10 +132,18 @@ Key fields per ticket:
 
 ## Safety
 
-- Bart **never** auto-commits and **never** auto-merges. Completed tickets leave their branch dirty on `marge/<slug>/<id>`; you inspect and merge.
+- M.A.R.G.E. **never** auto-commits and **never** auto-merges. Completed tickets leave their branch dirty on `marge/<slug>/<id>`; you inspect and merge.
 - `marge prune` is destructive — it removes worktrees but leaves branches.
 - The `echo` agent is safe for CI / tests — it produces a canned response without calling any LLM.
 
+## Tests
+
+```bash
+bash tests/run.sh
+```
+
+21 tests covering the full verb surface (help, init, plan/parse, list, show, summary, next/set-status dependency logic, routing, schema validity, syntax). Runs with `MARGE_AGENT=echo` and fixtures under `tests/fixtures/` — no LLM calls, no external deps beyond what M.A.R.G.E. already needs (bash, git, jq, python3).
+
 ## Dogfooding
 
-The very first real run of Bart was Bart finishing itself — see `../../EPIC.md` at the repo root for the remaining build as a spec sheet.
+See `../../EPIC.md` at the repo root for the v0.2 roadmap expressed as a Marge spec sheet — the intent is that the next real `--marge execute` run will finish building Marge herself.
