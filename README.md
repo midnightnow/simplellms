@@ -83,11 +83,12 @@ Follow the [NotebookLM MCP Setup Guide](https://github.com/PleasePrompto/noteboo
 # Research-first development
 simplellms --lisa "Implement the new authentication service"
 
-# Creative problem solving
-simplellms --bart "Find a way around this dependency conflict"
+# Epic orchestrator (M.A.R.G.E.) — plan, dispatch in parallel worktrees, review, pivot
+simplellms --marge plan "Build an auth-gated dashboard that lists and creates agents"
+simplellms --marge execute --concurrency 3
 
-# System integration
-simplellms --marge "Reconcile these three microservices"
+# Creative-pivot one-shot (still works; also invoked internally by M.A.R.G.E. on stuck tickets)
+simplellms --bart "Find a way around this dependency conflict"
 
 # Batch processing
 simplellms --homer "Refactor all components to TypeScript strict mode"
@@ -139,6 +140,34 @@ simplellms --blackboard "Verify all agents are behaving"
 │                                                                  │
 └─────────────────────────────────────────────────────────────────┘
 ```
+
+---
+
+## 🎼 M.A.R.G.E. Epic Orchestrator Mode
+
+M.A.R.G.E.'s scope grows from "reconcile fighting systems" to **epic orchestrator** for the whole suite. She drives the other agents as pipeline stages and runs end-to-end without babysitting:
+
+```
+ epic → L.I.S.A.-plan → H.O.M.E.R.-dispatch (parallel worktrees)
+        → M.A.G.G.I.E.-review → B.A.R.T.-pivot (if stuck) → repeat
+```
+
+Task-Master-compatible verbs:
+
+```bash
+simplellms --marge init                              # in any git repo
+simplellms --marge plan "<epic>"                     # or: --marge parse ./EPIC.md
+simplellms --marge list                              # ticket graph w/ status
+simplellms --marge execute --concurrency 3           # the whole loop
+simplellms --marge show T001                         # ticket details
+simplellms --marge summary                           # progress dashboard
+```
+
+State lives in `.marge/` inside the **target** repo (plain JSON + markdown, git-friendly). Pluggable backends: `MARGE_AGENT=claude|gemini|amp|echo`. See [src/marge/README.md](src/marge/README.md) for the full pipeline, schema, and env vars; see [EPIC.md](EPIC.md) for the v0.2 roadmap expressed as a Marge spec sheet.
+
+**Design note.** The classical Blackboard Pattern separates *shared state* (the board) from the *controller* that schedules knowledge sources. That mirror here is deliberate: `.marge/epic.json` is the board; M.A.R.G.E. is the controller; L.I.S.A. / H.O.M.E.R. / M.A.G.G.I.E. / B.A.R.T. are the knowledge sources. The existing SimpleLLMs Blackboard stays in its passive-governance role.
+
+**B.A.R.T. stays B.A.R.T.** — the creative-pivot one-shot (`simplellms --bart "<task>"`) still works, and M.A.R.G.E. calls the same persona internally when a reviewer returns `needs_pivot`.
 
 ---
 

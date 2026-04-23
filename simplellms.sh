@@ -43,13 +43,33 @@ case "${1:-}" in
         shift
         claude --profile lisa "$@"
         ;;
-    --bart)
-        shift
-        claude --profile bart "$@"
-        ;;
     --marge)
         shift
-        claude --profile marge "$@"
+        # M.A.R.G.E. — Epic orchestrator. Plans an epic into tickets,
+        # dispatches them in parallel worktrees (H.O.M.E.R. DNA), reviews
+        # via M.A.G.G.I.E., and summons B.A.R.T. on stuck tickets.
+        # Task-Master-compatible verbs.
+        MARGE_SCRIPT="$(dirname "$0")/src/marge/marge.sh"
+        if [[ ! -x "$MARGE_SCRIPT" ]]; then
+            echo -e "${RED}marge orchestrator not found at $MARGE_SCRIPT${NC}" >&2
+            exit 1
+        fi
+        case "${1:-}" in
+            init|plan|parse|list|ls|next|show|set-status|run|review|execute|go|summary|prune|help|-h|--help|"")
+                exec "$MARGE_SCRIPT" "$@"
+                ;;
+            *)
+                # Bare string after --marge → treat as an epic to plan
+                exec "$MARGE_SCRIPT" plan "$*"
+                ;;
+        esac
+        ;;
+    --bart)
+        shift
+        # B.A.R.T. — Creative-pivot one-shot (the legacy behavior).
+        # For the epic orchestrator, use --marge instead. M.A.R.G.E. itself
+        # calls this same persona internally when a reviewer flags needs_pivot.
+        claude --profile bart "$@"
         ;;
     --claudog)
         shift
