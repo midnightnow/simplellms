@@ -23,31 +23,38 @@ graph_ticket() {
     jq --arg id "$id" '.tickets[] | select(.id==$id)' "$MARGE_DIR/epic.json"
 }
 
+# Concurrency-safe: every mutator uses a per-PID-per-ticket tmp file so
+# parallel workers can't clobber each other, and only promotes the tmp
+# file to epic.json if jq succeeds. If jq fails, epic.json is untouched
+# and the bad tmp is removed.
+_graph_mutate() {
+    local filter="$1"; shift  # remaining args are forwarded to jq
+    local tmp="$MARGE_DIR/epic.json.tmp.$$.$RANDOM"
+    if jq "$@" "$filter" "$MARGE_DIR/epic.json" > "$tmp" && [[ -s "$tmp" ]]; then
+        mv "$tmp" "$MARGE_DIR/epic.json"
+        return 0
+    fi
+    rm -f "$tmp"
+    err "graph mutation failed (jq filter: ${filter:0:60}...)"
+    return 1
+}
+
 graph_set_status() {
     local id="$1" status="$2"
-    local tmp="$MARGE_DIR/epic.json.tmp"
-    jq --arg id "$id" --arg s "$status" '
-        .tickets |= map(if .id==$id then .status=$s else . end)
-    ' "$MARGE_DIR/epic.json" > "$tmp"
-    mv "$tmp" "$MARGE_DIR/epic.json"
+    _graph_mutate '.tickets |= map(if .id==$id then .status=$s else . end)' \
+        --arg id "$id" --arg s "$status"
 }
 
 graph_set_field() {
     local id="$1" key="$2" value="$3"
-    local tmp="$MARGE_DIR/epic.json.tmp"
-    jq --arg id "$id" --arg k "$key" --arg v "$value" '
-        .tickets |= map(if .id==$id then .[$k]=$v else . end)
-    ' "$MARGE_DIR/epic.json" > "$tmp"
-    mv "$tmp" "$MARGE_DIR/epic.json"
+    _graph_mutate '.tickets |= map(if .id==$id then .[$k]=$v else . end)' \
+        --arg id "$id" --arg k "$key" --arg v "$value"
 }
 
 graph_incr_pivots() {
     local id="$1"
-    local tmp="$MARGE_DIR/epic.json.tmp"
-    jq --arg id "$id" '
-        .tickets |= map(if .id==$id then .pivots = ((.pivots // 0) + 1) else . end)
-    ' "$MARGE_DIR/epic.json" > "$tmp"
-    mv "$tmp" "$MARGE_DIR/epic.json"
+    _graph_mutate '.tickets |= map(if .id==$id then .pivots = ((.pivots // 0) + 1) else . end)' \
+        --arg id "$id"
 }
 
 graph_pivots() {

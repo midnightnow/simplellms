@@ -200,11 +200,16 @@ cmd_run() {
         "TEST_STRATEGY=$strategy")
 
     info "  [$id] executing in $wt"
-    agent_run "$prompt" "$wt" >/dev/null || {
-        state_append_ticket_log "$id" "run: agent invocation failed"
+    local agent_log="$MARGE_DIR/tickets/${id}.agent.log"
+    : > "$agent_log"
+    if ! MARGE_AGENT_LOG="$agent_log" agent_run "$prompt" "$wt" > "$agent_log.stdout" 2>>"$agent_log"; then
+        state_append_ticket_log "$id" "run: agent invocation failed. tail of $agent_log:
+\`\`\`
+$(tail -20 "$agent_log" 2>/dev/null)
+\`\`\`"
         graph_set_status "$id" "failed"
         return 1
-    }
+    fi
 
     state_append_ticket_log "$id" "run: agent completed"
     ok "  [$id] agent completed"
@@ -243,11 +248,17 @@ cmd_review() {
         "BLOCK_NOTE=$block")
 
     info "  [$id] reviewing"
-    local verdict; verdict="$(agent_run_json "$prompt")" || {
-        state_append_ticket_log "$id" "review: reviewer returned non-JSON → needs_human"
+    local review_log="$MARGE_DIR/tickets/${id}.review.log"
+    : > "$review_log"
+    local verdict
+    if ! verdict="$(MARGE_AGENT_LOG="$review_log" agent_run_json "$prompt")"; then
+        state_append_ticket_log "$id" "review: reviewer returned non-JSON → needs_human. tail of $review_log:
+\`\`\`
+$(tail -20 "$review_log" 2>/dev/null)
+\`\`\`"
         graph_set_status "$id" "needs_human"
         return 0
-    }
+    fi
 
     local outcome reason
     outcome=$(jq -r '.outcome' <<<"$verdict")
@@ -315,10 +326,16 @@ cmd_pivot() {
         "PIVOT_HINT=$hint")
 
     info "  [$id] pivoting (attempt $((pivots + 1)))"
-    agent_run "$prompt" "$wt" >/dev/null || {
+    local pivot_log="$MARGE_DIR/tickets/${id}.pivot.log"
+    : > "$pivot_log"
+    if ! MARGE_AGENT_LOG="$pivot_log" agent_run "$prompt" "$wt" > "$pivot_log.stdout" 2>>"$pivot_log"; then
+        state_append_ticket_log "$id" "pivot: agent failed. tail of $pivot_log:
+\`\`\`
+$(tail -20 "$pivot_log" 2>/dev/null)
+\`\`\`"
         graph_set_status "$id" "failed"
         return 1
-    }
+    fi
     state_append_ticket_log "$id" "pivot: attempt $((pivots + 1)) completed"
 }
 
@@ -327,6 +344,20 @@ cmd_execute() {
     state_epic_exists || die "no epic planned. run 'marge plan' or 'marge parse' first."
 
     step "M.A.R.G.E. execute — agent=$MARGE_AGENT concurrency=$MARGE_CONCURRENCY"
+
+    # Resume safety: any ticket still marked in_progress at startup is an
+    # orphan from a previous run that was killed/crashed. Reset to pending
+    # so this run can pick it up. Zero downside — by definition no worker
+    # is currently running for it.
+    local stranded; stranded=$(jq -r '.tickets[] | select(.status=="in_progress") | .id' "$MARGE_DIR/epic.json")
+    if [[ -n "$stranded" ]]; then
+        warn "resetting stranded in_progress tickets: $(tr '\n' ' ' <<<"$stranded")"
+        while IFS= read -r id; do
+            [[ -z "$id" ]] && continue
+            graph_set_status "$id" "pending"
+            state_append_ticket_log "$id" "resume: stranded in_progress → pending (orphan from killed run)"
+        done <<<"$stranded"
+    fi
 
     local iter=0
     while graph_has_pending; do

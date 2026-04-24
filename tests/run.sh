@@ -262,6 +262,138 @@ test_fixture_validates_against_expected_shape() {
 }
 
 # ========================================================================
+#  tier-A regressions — tests for the 5 critical bugs
+# ========================================================================
+
+# Fix #1 + #4: concurrent status updates must not corrupt epic.json
+test_concurrent_status_updates_are_safe() {
+    setup_repo >/dev/null
+    "$SIMPLELLMS" --marge init >/dev/null 2>&1
+    MARGE_ECHO_FIXTURE="$FIX/plan-3-tickets.json" \
+        "$SIMPLELLMS" --marge plan "x" >/dev/null 2>&1
+
+    # Fire off 20 concurrent set-status calls against different tickets.
+    # Pre-fix, these raced on epic.json.tmp and frequently corrupted state.
+    local pids=()
+    local i
+    for i in $(seq 1 20); do
+        local tid tst
+        case $((i % 3)) in
+            0) tid=T001 ;;
+            1) tid=T002 ;;
+            2) tid=T003 ;;
+        esac
+        case $((i % 4)) in
+            0) tst=pending ;;
+            1) tst=done ;;
+            2) tst=needs_pivot ;;
+            3) tst=failed ;;
+        esac
+        "$SIMPLELLMS" --marge set-status "$tid" "$tst" >/dev/null 2>&1 &
+        pids+=($!)
+    done
+    for pid in "${pids[@]}"; do wait "$pid" 2>/dev/null || true; done
+
+    # After the storm, epic.json must still be valid JSON with all 3 tickets.
+    if ! jq empty .marge/epic.json 2>/dev/null; then
+        printf "    epic.json is not valid JSON after concurrent writes\n" >&2
+        return 1
+    fi
+    local n; n=$(jq '.tickets | length' .marge/epic.json)
+    assert_eq "3" "$n" "concurrent writes must preserve ticket count"
+
+    # No stale tmp files should remain.
+    local leftover; leftover=$(find .marge -maxdepth 1 -name 'epic.json.tmp.*' 2>/dev/null | head -1)
+    if [[ -n "$leftover" ]]; then
+        printf "    stale tmp file left behind: %s\n" "$leftover" >&2
+        return 1
+    fi
+}
+
+# Fix #2: stranded in_progress must be reset on next execute
+test_stranded_in_progress_is_reset() {
+    setup_repo >/dev/null
+    "$SIMPLELLMS" --marge init >/dev/null 2>&1
+    MARGE_ECHO_FIXTURE="$FIX/plan-3-tickets.json" \
+        "$SIMPLELLMS" --marge plan "x" >/dev/null 2>&1
+
+    # Simulate a killed run: leave a ticket stuck in in_progress.
+    "$SIMPLELLMS" --marge set-status T001 in_progress >/dev/null 2>&1
+    local before; before=$(jq -r '.tickets[] | select(.id=="T001") | .status' .marge/epic.json)
+    assert_eq "in_progress" "$before" "setup: T001 should be in_progress"
+
+    # Running execute should reset it before the loop runs. Even if the
+    # loop then fails (echo backend produces no diff), the reset must
+    # have happened. Echo backend completes in <1s on this fixture, so
+    # we don't wrap in `timeout` (which isn't on stock macOS anyway).
+    "$SIMPLELLMS" --marge execute >/dev/null 2>&1 || true
+
+    # After execute touches it, status should no longer be in_progress
+    # (either pending if reset succeeded and nothing ran, or failed/done
+    # if a full run completed, but NEVER the original orphaned state).
+    local after; after=$(jq -r '.tickets[] | select(.id=="T001") | .status' .marge/epic.json)
+    if [[ "$after" == "in_progress" ]]; then
+        printf "    T001 still in_progress after execute — reset did not happen\n" >&2
+        return 1
+    fi
+}
+
+# Fix #3: agent timeout wrapper is present and honors MARGE_TIMEOUT
+test_agent_timeout_is_wired() {
+    # Verify the code path: agent.sh must reference `timeout` and MARGE_TIMEOUT.
+    # This is a structural test — actually triggering a timeout requires a
+    # real hanging process, which we don't want to flake on.
+    local agent_sh="$SIMPLELLMS_ROOT/src/marge/lib/agent.sh"
+    grep -qE 'timeout \$MARGE_TIMEOUT|gtimeout \$MARGE_TIMEOUT' "$agent_sh" \
+        || { printf "    agent.sh missing timeout wrapper\n" >&2; return 1; }
+    grep -q 'MARGE_TIMEOUT:=600' "$agent_sh" \
+        || { printf "    agent.sh missing default MARGE_TIMEOUT=600\n" >&2; return 1; }
+    grep -q '124)' "$agent_sh" \
+        || { printf "    agent.sh missing timeout exit-code (124) handler\n" >&2; return 1; }
+}
+
+# Fix #5: agent failures must leave a .agent.log / .review.log breadcrumb
+test_agent_failure_paths_write_logs() {
+    # Structural test: marge.sh cmd_run + cmd_review + cmd_pivot must
+    # reference MARGE_AGENT_LOG and write a log file under .marge/tickets/.
+    local marge_sh="$SIMPLELLMS_ROOT/src/marge/marge.sh"
+    grep -q 'MARGE_AGENT_LOG=.*agent_log' "$marge_sh" \
+        || { printf "    cmd_run doesn't wire MARGE_AGENT_LOG\n" >&2; return 1; }
+    grep -q 'review.log' "$marge_sh" \
+        || { printf "    cmd_review doesn't create review.log\n" >&2; return 1; }
+    grep -q 'pivot.log' "$marge_sh" \
+        || { printf "    cmd_pivot doesn't create pivot.log\n" >&2; return 1; }
+}
+
+# Fix #4 as graph-level behavior: a failing jq mutation must NOT clobber epic.json
+test_failed_jq_mutation_does_not_truncate_epic_json() {
+    setup_repo >/dev/null
+    "$SIMPLELLMS" --marge init >/dev/null 2>&1
+    MARGE_ECHO_FIXTURE="$FIX/plan-3-tickets.json" \
+        "$SIMPLELLMS" --marge plan "x" >/dev/null 2>&1
+
+    local before; before=$(wc -c < .marge/epic.json)
+
+    # Sabotage epic.json to be unparseable, then try to set a status.
+    # Pre-fix: `jq > tmp` would error, leaving tmp empty, then mv would
+    # clobber epic.json with 0 bytes. Our fix checks [[ -s "$tmp" ]].
+    cp .marge/epic.json .marge/epic.json.bak
+    printf "not json" > .marge/epic.json
+    "$SIMPLELLMS" --marge set-status T001 done >/dev/null 2>&1 || true
+
+    # epic.json should still be whatever we sabotaged it to (unparseable),
+    # NOT an empty truncation. We prove this by restoring from backup and
+    # checking the backup's integrity wasn't relevant here — the key
+    # invariant is that epic.json is not empty.
+    local size; size=$(wc -c < .marge/epic.json)
+    if [[ "$size" -eq 0 ]]; then
+        printf "    epic.json was truncated to 0 bytes by failed mutation\n" >&2
+        return 1
+    fi
+    mv .marge/epic.json.bak .marge/epic.json
+}
+
+# ========================================================================
 #  syntax
 # ========================================================================
 
