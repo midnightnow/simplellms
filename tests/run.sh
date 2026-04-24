@@ -365,6 +365,17 @@ test_agent_failure_paths_write_logs() {
         || { printf "    cmd_pivot doesn't create pivot.log\n" >&2; return 1; }
 }
 
+# Script must resolve its own symlinks so PATH invocation works.
+# Regression test for the bug discovered when setting up ~/.local/bin/simplellms.
+test_script_works_when_invoked_via_symlink() {
+    local linkdir; linkdir="$(mktemp -d -t marge-symlink.XXXXXX)"
+    _tmpdirs+=("$linkdir")
+    ln -s "$SIMPLELLMS" "$linkdir/simplellms-link"
+    local out; out="$("$linkdir/simplellms-link" --marge help 2>&1)"
+    assert_contains "$out" "M.A.R.G.E." "symlinked invocation must resolve src/marge/marge.sh"
+    assert_not_contains "$out" "not found" "must not emit 'orchestrator not found' error"
+}
+
 # Fix #4 as graph-level behavior: a failing jq mutation must NOT clobber epic.json
 test_failed_jq_mutation_does_not_truncate_epic_json() {
     setup_repo >/dev/null

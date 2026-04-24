@@ -4,6 +4,18 @@
 
 set -e
 
+# Resolve $0 through any symlinks so `--marge` finds src/marge/marge.sh
+# whether we're invoked directly, via ~/.local/bin/simplellms, or via any
+# other symlink chain. Portable across bash 3 (macOS) and bash 4+ (Linux).
+_src="$0"
+while [[ -L "$_src" ]]; do
+    _dir="$(cd -P "$(dirname "$_src")" && pwd)"
+    _src="$(readlink "$_src")"
+    [[ "$_src" != /* ]] && _src="$_dir/$_src"
+done
+SIMPLELLMS_ROOT="$(cd -P "$(dirname "$_src")" && pwd)"
+unset _src _dir
+
 # Colors
 CYAN='\033[0;36m'
 GREEN='\033[0;32m'
@@ -49,7 +61,7 @@ case "${1:-}" in
         # dispatches them in parallel worktrees (H.O.M.E.R. DNA), reviews
         # via M.A.G.G.I.E., and summons B.A.R.T. on stuck tickets.
         # Task-Master-compatible verbs.
-        MARGE_SCRIPT="$(dirname "$0")/src/marge/marge.sh"
+        MARGE_SCRIPT="$SIMPLELLMS_ROOT/src/marge/marge.sh"
         if [[ ! -x "$MARGE_SCRIPT" ]]; then
             echo -e "${RED}marge orchestrator not found at $MARGE_SCRIPT${NC}" >&2
             exit 1
