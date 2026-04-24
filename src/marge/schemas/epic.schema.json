@@ -1,0 +1,64 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Marge Epic",
+  "description": "A spec-grounded ticket graph that M.A.R.G.E. orchestrates end-to-end. Shape is deliberately compatible with the Task Master (eyaltoledano/claude-task-master) tasks.json format so tickets can be imported/exported cleanly.",
+  "type": "object",
+  "required": ["meta", "tickets"],
+  "properties": {
+    "meta": {
+      "type": "object",
+      "required": ["id", "title", "slug", "created"],
+      "properties": {
+        "id": { "type": "string", "description": "short epic id, e.g. 'auth-dashboard'" },
+        "title": { "type": "string" },
+        "slug": { "type": "string", "description": "used for branch prefixes: marge/<slug>/<ticket-id>" },
+        "description": { "type": "string" },
+        "created": { "type": "string", "format": "date-time" },
+        "marge_version": { "type": "string" },
+        "agent": { "type": "string", "description": "agent backend used: claude|gemini|amp|echo" },
+        "spec_sources": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "paths or URLs used as grounding sources for the plan"
+        }
+      }
+    },
+    "tickets": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/ticket" }
+    }
+  },
+  "$defs": {
+    "ticket": {
+      "type": "object",
+      "required": ["id", "title", "status"],
+      "properties": {
+        "id": { "type": "string", "pattern": "^T[0-9]{3,}$", "description": "e.g. T001" },
+        "title": { "type": "string" },
+        "description": { "type": "string", "description": "one-line summary" },
+        "details": { "type": "string", "description": "full markdown spec for the ticket" },
+        "acceptance_criteria": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "machine-checkable conditions the review step verifies"
+        },
+        "test_strategy": { "type": "string" },
+        "priority": { "type": "string", "enum": ["high", "medium", "low"] },
+        "dependencies": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "ticket ids that must be 'done' before this one is eligible"
+        },
+        "status": {
+          "type": "string",
+          "enum": ["pending", "in_progress", "done", "needs_pivot", "needs_human", "failed", "blocked"]
+        },
+        "pivots": { "type": "integer", "minimum": 0, "default": 0 },
+        "subtasks": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/ticket" }
+        }
+      }
+    }
+  }
+}

@@ -1,0 +1,43 @@
+{
+  "meta": {
+    "id": "hello-site",
+    "title": "Tiny hello site",
+    "slug": "hello-site",
+    "description": "Static HTML hello + a README."
+  },
+  "tickets": [
+    {
+      "id": "T001",
+      "title": "Create index.html",
+      "description": "Minimal HTML saying hello",
+      "details": "Create index.html with a <h1>Hello</h1>",
+      "acceptance_criteria": ["File index.html exists", "Contains <h1>Hello</h1>"],
+      "test_strategy": "grep -q '<h1>Hello</h1>' index.html",
+      "priority": "high",
+      "dependencies": [],
+      "status": "pending"
+    },
+    {
+      "id": "T002",
+      "title": "Create README",
+      "description": "One-line README",
+      "details": "Write README.md describing the site",
+      "acceptance_criteria": ["README.md exists"],
+      "test_strategy": "test -f README.md",
+      "priority": "medium",
+      "dependencies": [],
+      "status": "pending"
+    },
+    {
+      "id": "T003",
+      "title": "Link README from index.html",
+      "description": "Add <a href=README.md> to index.html",
+      "details": "Depends on both T001 and T002",
+      "acceptance_criteria": ["index.html links to README.md"],
+      "test_strategy": "grep -q 'README.md' index.html",
+      "priority": "low",
+      "dependencies": ["T001", "T002"],
+      "status": "pending"
+    }
+  ]
+}
