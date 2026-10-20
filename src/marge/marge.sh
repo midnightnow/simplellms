@@ -17,7 +17,8 @@
 #   marge prune                          remove all marge worktrees (destructive)
 #
 # Env vars:
-#   MARGE_AGENT          claude | gemini | amp | echo      (default: claude)
+#   MARGE_AGENT          claude | gemini | amp | codex | qwen | opencode | goose | aider | local | echo (default: claude)
+#   MARGE_REVIEW_AGENT   optional override for review step (default: $MARGE_AGENT)
 #   MARGE_CONCURRENCY    max parallel tickets per batch     (default: 1)
 #   MARGE_MAX_PIVOTS     pivots allowed per ticket          (default: 1)
 #   MARGE_ROOT           state dir name inside repo         (default: .marge)
@@ -45,7 +46,7 @@ Usage:
   marge set-status <ticket-id> <status>
   marge run <ticket-id>
   marge review <ticket-id>
-  marge execute [--concurrency N] [--agent claude|gemini|amp|echo]
+  marge execute [--concurrency N] [--agent claude|gemini|amp|codex|qwen|opencode|goose|aider|local|echo]
   marge summary
   marge prune
 
@@ -200,10 +201,12 @@ cmd_run() {
         "TEST_STRATEGY=$strategy")
 
     info "  [$id] executing in $wt"
+    local ticket_agent; ticket_agent="$(graph_agent "$id")"
+    local active_agent="${ticket_agent:-$MARGE_AGENT}"
     local agent_log="$MARGE_DIR/tickets/${id}.agent.log"
     : > "$agent_log"
-    if ! MARGE_AGENT_LOG="$agent_log" agent_run "$prompt" "$wt" > "$agent_log.stdout" 2>>"$agent_log"; then
-        state_append_ticket_log "$id" "run: agent invocation failed. tail of $agent_log:
+    if ! MARGE_AGENT_LOG="$agent_log" MARGE_AGENT="$active_agent" agent_run "$prompt" "$wt" "$active_agent" > "$agent_log.stdout" 2>>"$agent_log"; then
+        state_append_ticket_log "$id" "run: agent ($active_agent) invocation failed. tail of $agent_log:
 \`\`\`
 $(tail -20 "$agent_log" 2>/dev/null)
 \`\`\`"
@@ -211,8 +214,8 @@ $(tail -20 "$agent_log" 2>/dev/null)
         return 1
     fi
 
-    state_append_ticket_log "$id" "run: agent completed"
-    ok "  [$id] agent completed"
+    state_append_ticket_log "$id" "run: agent ($active_agent) completed"
+    ok "  [$id] agent ($active_agent) completed"
     # status stays in_progress; review step decides final
 }
 
@@ -247,12 +250,13 @@ cmd_review() {
         "DIFF=$diff" \
         "BLOCK_NOTE=$block")
 
-    info "  [$id] reviewing"
+    local review_agent="${MARGE_REVIEW_AGENT:-$MARGE_AGENT}"
+    info "  [$id] reviewing (agent=$review_agent)"
     local review_log="$MARGE_DIR/tickets/${id}.review.log"
     : > "$review_log"
     local verdict
-    if ! verdict="$(MARGE_AGENT_LOG="$review_log" agent_run_json "$prompt")"; then
-        state_append_ticket_log "$id" "review: reviewer returned non-JSON → needs_human. tail of $review_log:
+    if ! verdict="$(MARGE_AGENT_LOG="$review_log" MARGE_AGENT="$review_agent" agent_run_json "$prompt")"; then
+        state_append_ticket_log "$id" "review: reviewer ($review_agent) returned non-JSON → needs_human. tail of $review_log:
 \`\`\`
 $(tail -20 "$review_log" 2>/dev/null)
 \`\`\`"
@@ -268,8 +272,15 @@ $(tail -20 "$review_log" 2>/dev/null)
 
     case "$outcome" in
         done)
+            worktree_commit "$id" "$title"
+            if ! worktree_merge_into_epic "$id" "$title"; then
+                state_append_ticket_log "$id" "review: approved by reviewer, but merge conflict occurred when integrating into epic branch -> needs_human"
+                graph_set_status "$id" "needs_human"
+                warn "  [$id] ! merge conflict integrating into epic branch -> needs_human"
+                return 0
+            fi
             graph_set_status "$id" "done"
-            ok "  [$id] ✓ done"
+            ok "  [$id] ✓ done (committed and integrated into $(worktree_epic_branch))"
             ;;
         needs_pivot)
             graph_set_status "$id" "needs_pivot"
@@ -325,11 +336,13 @@ cmd_pivot() {
         "DIFF=$diff" \
         "PIVOT_HINT=$hint")
 
-    info "  [$id] pivoting (attempt $((pivots + 1)))"
+    local ticket_agent; ticket_agent="$(graph_agent "$id")"
+    local active_agent="${ticket_agent:-$MARGE_AGENT}"
+    info "  [$id] pivoting (attempt $((pivots + 1)), agent=$active_agent)"
     local pivot_log="$MARGE_DIR/tickets/${id}.pivot.log"
     : > "$pivot_log"
-    if ! MARGE_AGENT_LOG="$pivot_log" agent_run "$prompt" "$wt" > "$pivot_log.stdout" 2>>"$pivot_log"; then
-        state_append_ticket_log "$id" "pivot: agent failed. tail of $pivot_log:
+    if ! MARGE_AGENT_LOG="$pivot_log" MARGE_AGENT="$active_agent" agent_run "$prompt" "$wt" "$active_agent" > "$pivot_log.stdout" 2>>"$pivot_log"; then
+        state_append_ticket_log "$id" "pivot: agent ($active_agent) failed. tail of $pivot_log:
 \`\`\`
 $(tail -20 "$pivot_log" 2>/dev/null)
 \`\`\`"
@@ -431,6 +444,10 @@ cmd_summary() {
     graph_render_tree
     local s; s=$(state_summary)
     printf "\n  %b%s%b\n" "$C_BOLD" "$s" "$C_RESET" >&2
+    local epic_branch; epic_branch="$(worktree_epic_branch 2>/dev/null || echo "")"
+    if [[ -n "$epic_branch" ]]; then
+        dim "  epic branch: $epic_branch"
+    fi
     local needs_human; needs_human=$(jq -r '.tickets[] | select(.status=="needs_human") | .id' "$MARGE_DIR/epic.json")
     if [[ -n "$needs_human" ]]; then
         warn "needs human review: $(tr '\n' ' ' <<<"$needs_human")"

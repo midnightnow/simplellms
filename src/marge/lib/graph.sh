@@ -94,6 +94,11 @@ graph_title() {
     jq -r --arg id "$id" '.tickets[] | select(.id==$id) | .title' "$MARGE_DIR/epic.json"
 }
 
+graph_agent() {
+    local id="$1"
+    jq -r --arg id "$id" '.tickets[] | select(.id==$id) | (.agent // "")' "$MARGE_DIR/epic.json"
+}
+
 graph_render_tree() {
     jq -r '
         .tickets[]

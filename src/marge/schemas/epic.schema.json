@@ -54,6 +54,10 @@
           "enum": ["pending", "in_progress", "done", "needs_pivot", "needs_human", "failed", "blocked"]
         },
         "pivots": { "type": "integer", "minimum": 0, "default": 0 },
+        "agent": {
+          "type": "string",
+          "description": "optional per-ticket agent override (claude|gemini|amp|codex|qwen|opencode|goose|aider|local|echo)"
+        },
         "subtasks": {
           "type": "array",
           "items": { "$ref": "#/$defs/ticket" }

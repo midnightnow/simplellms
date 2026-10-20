@@ -365,6 +365,31 @@ test_agent_failure_paths_write_logs() {
         || { printf "    cmd_pivot doesn't create pivot.log\n" >&2; return 1; }
 }
 
+# worktree_diff must surface untracked files. Pre-fix, scaffolding tickets
+# (which create new files the agent was told NOT to commit) produced an
+# empty diff and review silently marked them failed.
+test_worktree_diff_includes_untracked_files() {
+    setup_repo >/dev/null
+    "$SIMPLELLMS" --marge init >/dev/null 2>&1
+    MARGE_ECHO_FIXTURE="$FIX/plan-3-tickets.json" \
+        "$SIMPLELLMS" --marge plan "x" >/dev/null 2>&1
+
+    # Source the libs so we can call worktree_diff directly
+    export MARGE_DIR="$(pwd)/.marge"
+    export MARGE_SRC_DIR="$SIMPLELLMS_ROOT/src/marge"
+    source "$SIMPLELLMS_ROOT/src/marge/lib/common.sh"
+    source "$SIMPLELLMS_ROOT/src/marge/lib/worktree.sh"
+
+    # Create a worktree for T001 and drop a new file in it
+    local wt; wt="$(worktree_ensure T001)"
+    echo "hello" > "$wt/new-file.txt"
+
+    # diff must include the new file
+    local diff; diff="$(worktree_diff T001)"
+    assert_contains "$diff" "new-file.txt" "untracked file should appear in diff"
+    assert_contains "$diff" "+hello" "added content should appear in diff"
+}
+
 # Script must resolve its own symlinks so PATH invocation works.
 # Regression test for the bug discovered when setting up ~/.local/bin/simplellms.
 test_script_works_when_invoked_via_symlink() {
@@ -402,6 +427,83 @@ test_failed_jq_mutation_does_not_truncate_epic_json() {
         return 1
     fi
     mv .marge/epic.json.bak .marge/epic.json
+}
+
+# ========================================================================
+#  multi-agent routing (codex, qwen, opencode, goose, aider, local)
+# ========================================================================
+
+test_new_agent_backends_are_wired() {
+    local agent_sh="$SIMPLELLMS_ROOT/src/marge/lib/agent.sh"
+    for b in codex qwen opencode goose aider local; do
+        grep -q "${b})" "$agent_sh" \
+            || { printf "    agent.sh missing %s backend case\n" "$b" >&2; return 1; }
+    done
+}
+
+test_per_ticket_agent_override() {
+    setup_repo >/dev/null
+    "$SIMPLELLMS" --marge init >/dev/null 2>&1
+    MARGE_ECHO_FIXTURE="$FIX/plan-3-tickets.json" \
+        "$SIMPLELLMS" --marge plan "x" >/dev/null 2>&1
+
+    # Set per-ticket agent override on T001 to "echo" while global MARGE_AGENT is something invalid
+    export MARGE_DIR="$(pwd)/.marge"
+    export MARGE_SRC_DIR="$SIMPLELLMS_ROOT/src/marge"
+    source "$SIMPLELLMS_ROOT/src/marge/lib/common.sh"
+    source "$SIMPLELLMS_ROOT/src/marge/lib/graph.sh"
+    graph_set_field T001 agent echo
+
+    local resolved; resolved="$(graph_agent T001)"
+    assert_eq "echo" "$resolved" "graph_agent should return per-ticket agent override"
+
+    # Running T001 with global MARGE_AGENT=nonexistent should still succeed because T001 overrides to echo
+    MARGE_AGENT=nonexistent "$SIMPLELLMS" --marge run T001 >/dev/null 2>&1
+    assert_exit_code 0 "$?" "per-ticket agent=echo should override global MARGE_AGENT"
+}
+
+# ========================================================================
+#  integration: epic branch & worktree lineage
+# ========================================================================
+
+test_downstream_ticket_inherits_upstream_code() {
+    setup_repo >/dev/null
+    "$SIMPLELLMS" --marge init >/dev/null 2>&1
+    MARGE_ECHO_FIXTURE="$FIX/plan-3-tickets.json" \
+        "$SIMPLELLMS" --marge plan "x" >/dev/null 2>&1
+
+    export MARGE_DIR="$(pwd)/.marge"
+    export MARGE_SRC_DIR="$SIMPLELLMS_ROOT/src/marge"
+    source "$SIMPLELLMS_ROOT/src/marge/lib/common.sh"
+    source "$SIMPLELLMS_ROOT/src/marge/lib/graph.sh"
+    source "$SIMPLELLMS_ROOT/src/marge/lib/worktree.sh"
+    source "$SIMPLELLMS_ROOT/src/marge/lib/state.sh"
+    source "$SIMPLELLMS_ROOT/src/marge/lib/agent.sh"
+
+    # 1. T001 creates a file in its worktree
+    local wt1; wt1="$(worktree_ensure T001)"
+    echo "export const MODEL = 'user';" > "$wt1/src-model.ts"
+
+    # 2. Mock a successful review for T001
+    local review_fixture; review_fixture="$(mktemp -t marge-rev.XXXXXX)"
+    echo '{"outcome":"done","reason":"implemented correctly","criteria_results":[{"criterion":"file exists","met":true}]}' > "$review_fixture"
+    MARGE_ECHO_FIXTURE="$review_fixture" "$SIMPLELLMS" --marge review T001 >/dev/null 2>&1
+    rm -f "$review_fixture"
+
+    # Assert T001 is marked done
+    local s1; s1="$(jq -r '.tickets[] | select(.id=="T001") | .status' "$MARGE_DIR/epic.json")"
+    assert_eq "done" "$s1" "T001 status should be done"
+
+    # Assert epic branch has T001's commit
+    local epic_wt; epic_wt="$(worktree_ensure_epic)"
+    assert_file_exists "$epic_wt/src-model.ts" "epic branch should have T001's file"
+
+    # 3. T002 is dispatched into a new worktree
+    local wt2; wt2="$(worktree_ensure T002)"
+    # T002 must inherit T001's file!
+    assert_file_exists "$wt2/src-model.ts" "downstream ticket T002 must inherit T001's file from epic branch"
+    local content; content="$(cat "$wt2/src-model.ts")"
+    assert_contains "$content" "MODEL" "downstream ticket T002 must see upstream content"
 }
 
 # ========================================================================

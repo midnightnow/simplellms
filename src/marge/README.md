@@ -67,11 +67,14 @@ simplellms --marge execute
 
 | Var | Default | Meaning |
 |---|---|---|
-| `MARGE_AGENT`       | `claude`    | `claude` \| `gemini` \| `amp` \| `echo` (dry-run) |
-| `MARGE_CONCURRENCY` | `1`         | Max parallel tickets per batch (uses `git worktree`) |
-| `MARGE_MAX_PIVOTS`  | `1`         | How many pivots a single ticket gets before → `needs_human` |
-| `MARGE_ROOT`        | `.marge`     | Name of the state dir inside the target repo |
-| `MARGE_COLOR`       | `auto`      | `1` force colors, `0` disable |
+| `MARGE_AGENT`        | `claude`    | `claude` \| `gemini` \| `amp` \| `codex` \| `qwen` \| `opencode` \| `goose` \| `aider` \| `local` \| `echo` (dry-run) |
+| `MARGE_REVIEW_AGENT` | `$MARGE_AGENT` | Optional separate agent backend for the review pass (e.g. `codex` reviewing `qwen`) |
+| `MARGE_LOCAL_MODEL`  | `qwen3.6-27b` | Model name when `MARGE_AGENT=local` (LM Studio / Ollama) |
+| `MARGE_LOCAL_URL`    | `http://localhost:1234/v1` | Local OpenAI-compatible endpoint for `MARGE_AGENT=local` |
+| `MARGE_CONCURRENCY`  | `1`         | Max parallel tickets per batch (uses `git worktree`) |
+| `MARGE_MAX_PIVOTS`   | `1`         | How many pivots a single ticket gets before → `needs_human` |
+| `MARGE_ROOT`         | `.marge`     | Name of the state dir inside the target repo |
+| `MARGE_COLOR`        | `auto`      | `1` force colors, `0` disable |
 
 ## State layout
 
@@ -132,8 +135,8 @@ Key fields per ticket:
 
 ## Safety
 
-- M.A.R.G.E. **never** auto-commits and **never** auto-merges. Completed tickets leave their branch dirty on `marge/<slug>/<id>`; you inspect and merge.
-- `marge prune` is destructive — it removes worktrees but leaves branches.
+- M.A.R.G.E. commits verified work upon review approval (`done`) to `marge/<slug>/<id>` and integrates it into `marge/<slug>/epic`. Downstream dependent tickets automatically inherit all upstream work. When the epic finishes, merge `marge/<slug>/epic` into your main branch.
+- `marge prune` removes temporary worktree directories but safely preserves all committed branches in `.git/refs/heads/`.
 - The `echo` agent is safe for CI / tests — it produces a canned response without calling any LLM.
 
 ## Tests
