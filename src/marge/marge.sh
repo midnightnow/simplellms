@@ -17,7 +17,7 @@
 #   marge prune                          remove all marge worktrees (destructive)
 #
 # Env vars:
-#   MARGE_AGENT          claude | gemini | amp | codex | qwen | opencode | goose | aider | local | echo (default: claude)
+#   MARGE_AGENT          claude | gemini | amp | codex | qwen | opencode | goose | aider | local | openrouter | echo (default: claude)
 #   MARGE_REVIEW_AGENT   optional override for review step (default: $MARGE_AGENT)
 #   MARGE_CONCURRENCY    max parallel tickets per batch     (default: 1)
 #   MARGE_MAX_PIVOTS     pivots allowed per ticket          (default: 1)
@@ -46,7 +46,7 @@ Usage:
   marge set-status <ticket-id> <status>
   marge run <ticket-id>
   marge review <ticket-id>
-  marge execute [--concurrency N] [--agent claude|gemini|amp|codex|qwen|opencode|goose|aider|local|echo]
+  marge execute [--concurrency N] [--agent claude|gemini|amp|codex|qwen|opencode|goose|aider|local|openrouter|echo]
   marge summary
   marge prune
 

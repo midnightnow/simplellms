@@ -56,7 +56,7 @@
         "pivots": { "type": "integer", "minimum": 0, "default": 0 },
         "agent": {
           "type": "string",
-          "description": "optional per-ticket agent override (claude|gemini|amp|codex|qwen|opencode|goose|aider|local|echo)"
+          "description": "optional per-ticket agent override (claude|gemini|amp|codex|qwen|opencode|goose|aider|local|openrouter|echo)"
         },
         "subtasks": {
           "type": "array",

@@ -127,6 +127,21 @@ agent_run() {
                     -d "$payload" | jq -r '.choices[0].message.content // empty'
             fi
             ;;
+        openrouter)
+            [[ -n "${OPENROUTER_API_KEY:-}" ]] || die "MARGE_AGENT=openrouter requires OPENROUTER_API_KEY to be set in environment"
+            local model="${MARGE_MODEL:-anthropic/claude-3.5-sonnet}"
+            local payload
+            payload="$(jq -n --arg model "$model" --arg content "$prompt" \
+                '{model: $model, temperature: 0.1, messages: [{role: "user", content: $content}]}')"
+            local res
+            res="$(curl -sf -m "$MARGE_TIMEOUT" -X POST "https://openrouter.ai/api/v1/chat/completions" \
+                -H "Content-Type: application/json" \
+                -H "Authorization: Bearer $OPENROUTER_API_KEY" \
+                -H "HTTP-Referer: https://github.com/midnightnow/simplellms" \
+                -H "X-Title: SimpleLLMs-MARGE" \
+                -d "$payload")" || die "openrouter API request failed"
+            jq -r '.choices[0].message.content // empty' <<<"$res"
+            ;;
         echo)
             # dry-run. If $MARGE_ECHO_FIXTURE points at a file, return its
             # contents (use-case: replay a canned plan/review in tests).
@@ -142,7 +157,7 @@ agent_run() {
             fi
             ;;
         *)
-            die "unknown MARGE_AGENT='$backend' (expected: claude|gemini|amp|codex|qwen|opencode|goose|aider|local|echo)"
+            die "unknown MARGE_AGENT='$backend' (expected: claude|gemini|amp|codex|qwen|opencode|goose|aider|local|openrouter|echo)"
             ;;
     esac
 }

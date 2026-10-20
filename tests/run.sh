@@ -435,10 +435,20 @@ test_failed_jq_mutation_does_not_truncate_epic_json() {
 
 test_new_agent_backends_are_wired() {
     local agent_sh="$SIMPLELLMS_ROOT/src/marge/lib/agent.sh"
-    for b in codex qwen opencode goose aider local; do
+    for b in codex qwen opencode goose aider local openrouter; do
         grep -q "${b})" "$agent_sh" \
             || { printf "    agent.sh missing %s backend case\n" "$b" >&2; return 1; }
     done
+}
+
+test_openrouter_backend_fails_fast_without_key() {
+    export MARGE_SRC_DIR="$SIMPLELLMS_ROOT/src/marge"
+    source "$SIMPLELLMS_ROOT/src/marge/lib/common.sh"
+    source "$SIMPLELLMS_ROOT/src/marge/lib/agent.sh"
+
+    local err_out
+    err_out=$(OPENROUTER_API_KEY="" MARGE_AGENT=openrouter agent_run "test" 2>&1 || true)
+    assert_contains "$err_out" "requires OPENROUTER_API_KEY" "openrouter must fail fast without API key"
 }
 
 test_per_ticket_agent_override() {

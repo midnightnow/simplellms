@@ -67,8 +67,9 @@ simplellms --marge execute
 
 | Var | Default | Meaning |
 |---|---|---|
-| `MARGE_AGENT`        | `claude`    | `claude` \| `gemini` \| `amp` \| `codex` \| `qwen` \| `opencode` \| `goose` \| `aider` \| `local` \| `echo` (dry-run) |
+| `MARGE_AGENT`        | `claude`    | `claude` \| `gemini` \| `amp` \| `codex` \| `qwen` \| `opencode` \| `goose` \| `aider` \| `local` \| `openrouter` \| `echo` (dry-run) |
 | `MARGE_REVIEW_AGENT` | `$MARGE_AGENT` | Optional separate agent backend for the review pass (e.g. `codex` reviewing `qwen`) |
+| `MARGE_MODEL`         | `anthropic/claude-3.5-sonnet` | Model name when `MARGE_AGENT=openrouter` |
 | `MARGE_LOCAL_MODEL`  | `qwen3.6-27b` | Model name when `MARGE_AGENT=local` (LM Studio / Ollama) |
 | `MARGE_LOCAL_URL`    | `http://localhost:1234/v1` | Local OpenAI-compatible endpoint for `MARGE_AGENT=local` |
 | `MARGE_CONCURRENCY`  | `1`         | Max parallel tickets per batch (uses `git worktree`) |
