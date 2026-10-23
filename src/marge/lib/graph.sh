@@ -99,20 +99,43 @@ graph_agent() {
     jq -r --arg id "$id" '.tickets[] | select(.id==$id) | (.agent // "")' "$MARGE_DIR/epic.json"
 }
 
+# graph_set_subtasks <id> <json-array>
+# Replace a ticket's subtasks array wholesale (used by `marge expand`).
+graph_set_subtasks() {
+    local id="$1" subtasks="$2"
+    _graph_mutate '.tickets |= map(if .id==$id then .subtasks=$st else . end)' \
+        --arg id "$id" --argjson st "$subtasks"
+}
+
+# graph_subtasks <id> — print the ticket's subtasks array (or [] if none).
+graph_subtasks() {
+    local id="$1"
+    jq -c --arg id "$id" '.tickets[] | select(.id==$id) | (.subtasks // [])' "$MARGE_DIR/epic.json"
+}
+
+_graph_status_icon() {
+    # sets globals icon/color for a status string
+    case "$1" in
+        done)          icon="✓"; color="$C_GREEN"   ;;
+        in_progress)   icon="↻"; color="$C_CYAN"    ;;
+        needs_pivot)   icon="↯"; color="$C_YELLOW"  ;;
+        needs_human)   icon="!"; color="$C_MAGENTA" ;;
+        failed)        icon="✗"; color="$C_RED"     ;;
+        *)             icon="○"; color="$C_DIM"     ;;
+    esac
+}
+
 graph_render_tree() {
+    # Emits one row per ticket, followed by one row per subtask (depth 1)
+    # indented beneath its parent. Depth is the first TSV column.
     jq -r '
         .tickets[]
-        | [.id, .status, .title] | @tsv
-    ' "$MARGE_DIR/epic.json" | while IFS=$'\t' read -r id status title; do
-        local icon color
-        case "$status" in
-            done)          icon="✓"; color="$C_GREEN"   ;;
-            in_progress)   icon="↻"; color="$C_CYAN"    ;;
-            needs_pivot)   icon="↯"; color="$C_YELLOW"  ;;
-            needs_human)   icon="!"; color="$C_MAGENTA" ;;
-            failed)        icon="✗"; color="$C_RED"     ;;
-            *)             icon="○"; color="$C_DIM"     ;;
-        esac
-        printf "  %b%s%b  %s %b%s%b\n" "$color" "$icon" "$C_RESET" "$id" "$C_DIM" "$title" "$C_RESET" >&2
+        | ([0, .id, .status, .title] | @tsv),
+          ((.subtasks // [])[] | [1, .id, .status, .title] | @tsv)
+    ' "$MARGE_DIR/epic.json" | while IFS=$'\t' read -r depth id status title; do
+        local icon color indent=""
+        _graph_status_icon "$status"
+        if (( depth > 0 )); then indent="    └─ "; fi
+        printf "  %s%b%s%b  %s %b%s%b\n" "$indent" "$color" "$icon" "$C_RESET" "$id" "$C_DIM" "$title" "$C_RESET" >&2
     done
 }

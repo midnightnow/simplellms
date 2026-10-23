@@ -9,7 +9,7 @@
 #   marge next                           print the next ready ticket id
 #   marge show <id>                      print one ticket's full details
 #   marge set-status <id> <status>       manually set a ticket's status
-#   marge expand <id>                    break a ticket into subtasks (TODO v0.2)
+#   marge expand <id>                    break a ticket into subtasks (writes .subtasks[])
 #   marge run <id>                       execute one specific ticket (no review)
 #   marge review <id>                    re-run review on an already-executed ticket
 #   marge execute                        full orchestrator loop: plan(if needed) → dispatch → review → repeat
@@ -44,6 +44,7 @@ Usage:
   marge next
   marge show <ticket-id>
   marge set-status <ticket-id> <status>
+  marge expand <ticket-id>
   marge run <ticket-id>
   marge review <ticket-id>
   marge execute [--concurrency N] [--agent claude|gemini|amp|codex|qwen|opencode|goose|aider|local|openrouter|echo]
@@ -165,6 +166,62 @@ cmd_set_status() {
     graph_set_status "$id" "$status"
     state_append_ticket_log "$id" "manual set-status → $status"
     ok "$id → $status"
+}
+
+cmd_expand() {
+    state_init
+    state_epic_exists || die "no epic planned. run 'marge plan' or 'marge parse' first."
+    local id="$1"
+    [[ -z "$id" ]] && die "usage: marge expand <ticket-id>"
+
+    local title details crit strategy
+    title=$(graph_title "$id")
+    [[ -z "$title" || "$title" == "null" ]] && die "unknown ticket: $id"
+    details=$(jq -r --arg id "$id" '.tickets[] | select(.id==$id) | .details // .spec // ""' "$MARGE_DIR/epic.json")
+    crit=$(graph_acceptance "$id")
+    strategy=$(jq -r --arg id "$id" '.tickets[] | select(.id==$id) | .test_strategy // ""' "$MARGE_DIR/epic.json")
+
+    local epic_title epic_desc
+    epic_title=$(jq -r '.meta.title' "$MARGE_DIR/epic.json")
+    epic_desc=$(jq -r '.meta.description // ""' "$MARGE_DIR/epic.json")
+
+    step "expanding $id with $MARGE_AGENT"
+    local prompt
+    prompt=$(render_prompt "$MARGE_SRC_DIR/prompts/expand.md" \
+        "EPIC_TITLE=$epic_title" \
+        "EPIC_DESC=$epic_desc" \
+        "TICKET_ID=$id" \
+        "TICKET_TITLE=$title" \
+        "TICKET_DETAILS=$details" \
+        "ACCEPTANCE_CRITERIA=$crit" \
+        "TEST_STRATEGY=$strategy")
+
+    local expand_log="$MARGE_DIR/tickets/${id}.expand.log"
+    : > "$expand_log"
+    local json
+    json="$(MARGE_AGENT_LOG="$expand_log" agent_run_json "$prompt")" || die "expander returned invalid JSON (see $expand_log)"
+
+    # normalise: subtasks[] must be an array; ids dotted under the parent
+    # (T001.1, T001.2, …) when missing; status=pending; pivots=0.
+    local subtasks
+    subtasks="$(jq -c --arg id "$id" '
+        (.subtasks // []) | to_entries | map(
+            .key as $i | .value
+            | .id = (if (.id|type)=="string" and (.id|length)>0 then .id else ($id + "." + (($i+1)|tostring)) end)
+            | .status = (.status // "pending")
+            | .pivots = (.pivots // 0)
+            | .dependencies = (.dependencies // [])
+        )
+    ' <<<"$json" 2>/dev/null)" || die "expander response has no usable subtasks[]"
+    local n; n=$(jq 'length' <<<"$subtasks")
+    (( n > 0 )) || die "expander returned an empty subtasks[] for $id"
+
+    graph_set_subtasks "$id" "$subtasks"
+    state_append_ticket_log "$id" "expand: $n subtask(s) via $MARGE_AGENT
+$(jq -r '.[] | "- " + .id + " — " + .title' <<<"$subtasks")"
+    state_log "expand: $id → $n subtasks"
+    ok "expanded $id into $n subtask(s)"
+    cmd_list
 }
 
 cmd_run() {
@@ -489,6 +546,7 @@ main() {
         next)        cmd_next ;;
         show)        cmd_show "${passthrough[@]:-}" ;;
         set-status)  cmd_set_status "${passthrough[@]:-}" ;;
+        expand)      cmd_expand "${passthrough[@]:-}" ;;
         run)         cmd_run "${passthrough[@]:-}" ;;
         review)      cmd_review "${passthrough[@]:-}" ;;
         execute|go)  cmd_execute ;;
