@@ -15,13 +15,13 @@ worktree_path() {
 
 worktree_branch() {
     local id="$1"
-    local slug; slug=$(jq -r '.slug // "epic"' "$MARGE_DIR/epic.json" 2>/dev/null || echo "epic")
+    local slug; slug=$(jq -r '.meta.slug // .slug // "epic"' "$MARGE_DIR/epic.json" 2>/dev/null || echo "epic")
     [[ -z "$slug" || "$slug" == "null" ]] && slug="epic"
     printf "marge/%s/%s" "$slug" "$id"
 }
 
 worktree_epic_branch() {
-    local slug; slug=$(jq -r '.slug // "epic"' "$MARGE_DIR/epic.json" 2>/dev/null || echo "epic")
+    local slug; slug=$(jq -r '.meta.slug // .slug // "epic"' "$MARGE_DIR/epic.json" 2>/dev/null || echo "epic")
     [[ -z "$slug" || "$slug" == "null" ]] && slug="epic"
     printf "marge/%s/epic" "$slug"
 }
@@ -131,8 +131,7 @@ worktree_diff() {
     # the agent was told NOT to commit) produce an empty diff and review
     # silently marks the ticket failed.
     git -C "$path" add -N -A . >/dev/null 2>&1 || true
-    git -C "$path" diff "$t_base"...HEAD 2>/dev/null
-    git -C "$path" diff 2>/dev/null
+    git -C "$path" diff "$t_base" 2>/dev/null
 }
 
 worktree_record_base() {
