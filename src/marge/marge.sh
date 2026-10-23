@@ -10,6 +10,8 @@
 #   marge show <id>                      print one ticket's full details
 #   marge set-status <id> <status>       manually set a ticket's status
 #   marge expand <id>                    break a ticket into subtasks (writes .subtasks[])
+#   marge import <tasks.json>            import a Task Master tasks.json as the epic
+#   marge export [path|-]                export the epic as Task Master tasks.json (default .marge/tasks.json)
 #   marge run <id>                       execute one specific ticket (no review)
 #   marge review <id>                    re-run review on an already-executed ticket
 #   marge execute                        full orchestrator loop: plan(if needed) → dispatch → review → repeat
@@ -31,6 +33,8 @@ source "$MARGE_SRC_DIR/lib/state.sh"
 source "$MARGE_SRC_DIR/lib/graph.sh"
 source "$MARGE_SRC_DIR/lib/worktree.sh"
 source "$MARGE_SRC_DIR/lib/agent.sh"
+source "$MARGE_SRC_DIR/lib/taskmaster.sh"
+source "$MARGE_SRC_DIR/lib/schema.sh"
 
 usage() {
     cat >&2 <<'EOF'
@@ -45,6 +49,8 @@ Usage:
   marge show <ticket-id>
   marge set-status <ticket-id> <status>
   marge expand <ticket-id>
+  marge import <tasks.json>
+  marge export [path|-]
   marge run <ticket-id>
   marge review <ticket-id>
   marge execute [--concurrency N] [--agent claude|gemini|amp|codex|qwen|opencode|goose|aider|local|openrouter|echo]
@@ -109,8 +115,16 @@ cmd_plan() {
     ' <<<"$json")"
 
     state_write_epic_json "$json"
+    write_ticket_mds "$json"
 
-    # write per-ticket md files
+    state_log "plan: $(jq '.tickets | length' <<<"$json") tickets"
+    ok "planned $(jq '.tickets | length' <<<"$json") tickets"
+    cmd_list
+}
+
+# write_ticket_mds <epic-json> — (re)write .marge/tickets/<ID>.md for every ticket
+write_ticket_mds() {
+    local json="$1"
     jq -c '.tickets[]' <<<"$json" | while read -r t; do
         local id title details crit
         id=$(jq -r '.id' <<<"$t")
@@ -125,10 +139,64 @@ ${details}
 ${crit}
 "
     done
+}
 
-    state_log "plan: $(jq '.tickets | length' <<<"$json") tickets"
-    ok "planned $(jq '.tickets | length' <<<"$json") tickets"
+cmd_import() {
+    require_cmd git jq python3
+    require_git_repo
+    state_init
+    worktree_record_base
+
+    local src="${1:-}"
+    [[ -z "$src" ]] && die "usage: marge import <path/to/tasks.json>"
+    [[ -f "$src" ]] || die "file not found: $src"
+    jq empty "$src" 2>/dev/null || die "not valid JSON: $src"
+
+    local base title slug
+    base="$(basename "$src")"; base="${base%.json}"
+    title="$(taskmaster_default_title "$src" "Task Master: $base")"
+    slug="$(slugify <<<"$title")"
+    [[ -z "$slug" ]] && slug="taskmaster-import"
+
+    step "importing Task Master tasks from $src"
+    local json
+    json="$(taskmaster_to_epic "$src" "$title" "$slug" "$src")" || die "could not translate $src"
+    local n; n=$(jq '.tickets | length' <<<"$json")
+    (( n > 0 )) || die "no tasks found in $src (expected .tasks[] or .master.tasks[])"
+
+    # fail loud before touching state if the translated graph is off-schema
+    local tmp; tmp="$(mktemp -t marge-import.XXXXXX)"
+    printf "%s" "$json" > "$tmp"
+    if ! schema_validate_epic "$tmp"; then
+        rm -f "$tmp"
+        die "imported epic failed epic.schema.json validation"
+    fi
+    rm -f "$tmp"
+
+    state_write_epic_md "Imported from Task Master: $src"
+    state_write_epic_json "$json"
+    write_ticket_mds "$json"
+
+    state_log "import: $n tickets from $src"
+    ok "imported $n ticket(s) from $src"
     cmd_list
+}
+
+cmd_export() {
+    state_init
+    state_epic_exists || die "no epic planned. run 'marge plan', 'marge parse' or 'marge import' first."
+
+    local dest="${1:-$MARGE_DIR/tasks.json}"
+    local json
+    json="$(epic_to_taskmaster "$MARGE_DIR/epic.json")" || die "could not translate $MARGE_DIR/epic.json"
+
+    if [[ "$dest" == "-" ]]; then
+        printf "%s\n" "$json"
+        return 0
+    fi
+    printf "%s\n" "$json" > "$dest"
+    state_log "export: $(jq '.master.tasks | length' <<<"$json") tasks → $dest"
+    ok "exported $(jq '.master.tasks | length' <<<"$json") task(s) to $dest"
 }
 
 cmd_parse() {
@@ -547,6 +615,8 @@ main() {
         show)        cmd_show "${passthrough[@]:-}" ;;
         set-status)  cmd_set_status "${passthrough[@]:-}" ;;
         expand)      cmd_expand "${passthrough[@]:-}" ;;
+        import)      cmd_import "${passthrough[@]:-}" ;;
+        export)      cmd_export "${passthrough[@]:-}" ;;
         run)         cmd_run "${passthrough[@]:-}" ;;
         review)      cmd_review "${passthrough[@]:-}" ;;
         execute|go)  cmd_execute ;;

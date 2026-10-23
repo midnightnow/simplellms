@@ -1,0 +1,63 @@
+{
+  "master": {
+    "tasks": [
+      {
+        "id": 1,
+        "title": "Set up project scaffold",
+        "description": "Initialise the repo with package.json and lint config",
+        "details": "Run npm init, add eslint + prettier, commit the baseline.",
+        "testStrategy": "npm run lint exits 0",
+        "priority": "high",
+        "dependencies": [],
+        "status": "done",
+        "subtasks": [
+          {
+            "id": 1,
+            "title": "Init package.json",
+            "description": "npm init -y",
+            "details": "Set name, version, scripts.lint",
+            "testStrategy": "test -f package.json",
+            "status": "done",
+            "dependencies": []
+          },
+          {
+            "id": 2,
+            "title": "Add lint config",
+            "description": "eslint + prettier",
+            "details": "Add .eslintrc.json and .prettierrc",
+            "testStrategy": "npx eslint . exits 0",
+            "status": "done",
+            "dependencies": [1]
+          }
+        ]
+      },
+      {
+        "id": 2,
+        "title": "Implement auth middleware",
+        "description": "Express middleware that validates a session cookie",
+        "details": "Export requireAuth(req, res, next); 401 on missing/invalid cookie.",
+        "testStrategy": "unit tests for valid, missing, expired cookie",
+        "priority": "high",
+        "dependencies": [1],
+        "status": "in-progress",
+        "subtasks": []
+      },
+      {
+        "id": 3,
+        "title": "Wire dashboard route",
+        "description": "GET /dashboard behind requireAuth",
+        "details": "Mount the route; render a stub page.",
+        "testStrategy": "supertest: 401 anonymous, 200 authenticated",
+        "priority": "medium",
+        "dependencies": [1, 2],
+        "status": "pending",
+        "subtasks": []
+      }
+    ],
+    "metadata": {
+      "created": "2026-10-01T09:00:00Z",
+      "updated": "2026-10-20T17:30:00Z",
+      "description": "Tasks for master context"
+    }
+  }
+}

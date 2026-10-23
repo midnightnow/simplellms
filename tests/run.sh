@@ -259,6 +259,219 @@ test_help_lists_expand_verb() {
 }
 
 # ========================================================================
+#  import / export — Task Master bridge
+# ========================================================================
+
+test_help_lists_import_export_verbs() {
+    local out; out="$("$SIMPLELLMS" --marge help 2>&1)"
+    assert_contains "$out" "marge import" "help should list import verb"
+    assert_contains "$out" "marge export" "help should list export verb"
+}
+
+test_import_translates_taskmaster_fixture() {
+    setup_repo >/dev/null
+    "$SIMPLELLMS" --marge init >/dev/null 2>&1
+    "$SIMPLELLMS" --marge import "$FIX/taskmaster-sample.json" >/dev/null 2>&1
+    assert_exit_code 0 "$?" "import should succeed on a valid Task Master file"
+    assert_file_exists ".marge/epic.json"
+    assert_file_exists ".marge/tickets/T001.md" "import should write per-ticket md"
+
+    local n; n=$(jq '.tickets | length' .marge/epic.json)
+    assert_eq "3" "$n" "3 Task Master tasks → 3 tickets"
+
+    # int ids → T-prefixed, zero-padded
+    local ids; ids=$(jq -r '[.tickets[].id] | join(",")' .marge/epic.json)
+    assert_eq "T001,T002,T003" "$ids" "int ids should map to T001.."
+
+    # int dependencies → ticket ids
+    local deps; deps=$(jq -c '.tickets[] | select(.id=="T003") | .dependencies' .marge/epic.json)
+    assert_eq '["T001","T002"]' "$deps" "int dependencies should map to ticket ids"
+
+    # status mapping: in-progress → in_progress, done → done
+    local s2; s2=$(jq -r '.tickets[] | select(.id=="T002") | .status' .marge/epic.json)
+    assert_eq "in_progress" "$s2" "Task Master in-progress → marge in_progress"
+    local s1; s1=$(jq -r '.tickets[] | select(.id=="T001") | .status' .marge/epic.json)
+    assert_eq "done" "$s1"
+
+    # testStrategy → test_strategy
+    local ts; ts=$(jq -r '.tickets[] | select(.id=="T001") | .test_strategy' .marge/epic.json)
+    assert_eq "npm run lint exits 0" "$ts" "testStrategy should map to test_strategy"
+
+    # subtasks: dotted ids under the parent, sibling int deps → dotted ids
+    local sub_ids; sub_ids=$(jq -r '.tickets[] | select(.id=="T001") | [.subtasks[].id] | join(",")' .marge/epic.json)
+    assert_eq "T001.1,T001.2" "$sub_ids" "subtask ids should be dotted under the parent"
+    local sub_dep; sub_dep=$(jq -c '.tickets[] | select(.id=="T001") | .subtasks[1].dependencies' .marge/epic.json)
+    assert_eq '["T001.1"]' "$sub_dep" "subtask int deps should map to sibling dotted ids"
+
+    # meta is populated so list/next/execute work
+    local title slug created
+    title=$(jq -r '.meta.title' .marge/epic.json)
+    slug=$(jq -r '.meta.slug' .marge/epic.json)
+    created=$(jq -r '.meta.created' .marge/epic.json)
+    assert_contains "$title" "taskmaster-sample" "meta.title should derive from the source file"
+    assert_eq "task-master-taskmaster-sample" "$slug" "meta.slug should be a clean slug"
+    assert_eq "2026-10-01T09:00:00Z" "$created" "meta.created should carry over from Task Master metadata"
+
+    # the dependency logic must work on imported graphs: T001 done, T002 in_progress → nothing ready
+    local nxt; nxt="$("$SIMPLELLMS" --marge next 2>/dev/null)"
+    assert_eq "" "$nxt" "T003 waits on in-progress T002"
+}
+
+test_import_passes_epic_schema() {
+    setup_repo >/dev/null
+    "$SIMPLELLMS" --marge init >/dev/null 2>&1
+    "$SIMPLELLMS" --marge import "$FIX/taskmaster-sample.json" >/dev/null 2>&1
+
+    export MARGE_SRC_DIR="$SIMPLELLMS_ROOT/src/marge"
+    source "$SIMPLELLMS_ROOT/src/marge/lib/common.sh"
+    source "$SIMPLELLMS_ROOT/src/marge/lib/schema.sh"
+
+    local errs
+    errs="$(schema_validate_epic .marge/epic.json 2>&1)"
+    assert_exit_code 0 "$?" "imported epic.json should pass epic.schema.json: $errs"
+
+    # prove the validator has teeth: a bad id + bad status must be rejected
+    printf '%s' '{"meta":{"id":"x","title":"x","slug":"x","created":"now"},"tickets":[{"id":"bad","title":"t","status":"nope"}]}' > bad.json
+    errs="$(schema_validate_epic bad.json 2>&1 || true)"
+    assert_contains "$errs" "pattern" "validator should reject a non-T ticket id"
+    assert_contains "$errs" "enum" "validator should reject an unknown status"
+    if schema_validate_epic bad.json >/dev/null 2>&1; then
+        printf "    validator accepted an off-schema document\n" >&2
+        return 1
+    fi
+}
+
+test_import_rejects_missing_or_empty_file() {
+    setup_repo >/dev/null
+    "$SIMPLELLMS" --marge init >/dev/null 2>&1
+
+    "$SIMPLELLMS" --marge import does-not-exist.json >/dev/null 2>&1
+    local rc=$?
+    if (( rc == 0 )); then
+        printf "    expected nonzero exit for missing file, got 0\n" >&2
+        return 1
+    fi
+
+    echo '{"master":{"tasks":[]}}' > empty.json
+    "$SIMPLELLMS" --marge import empty.json >/dev/null 2>&1
+    rc=$?
+    if (( rc == 0 )); then
+        printf "    expected nonzero exit for a file with no tasks, got 0\n" >&2
+        return 1
+    fi
+    if [[ -f .marge/epic.json ]]; then
+        printf "    failed import must not write epic.json\n" >&2
+        return 1
+    fi
+}
+
+test_export_maps_planned_epic_to_taskmaster_shape() {
+    setup_repo >/dev/null
+    "$SIMPLELLMS" --marge init >/dev/null 2>&1
+    MARGE_ECHO_FIXTURE="$FIX/plan-3-tickets.json" \
+        "$SIMPLELLMS" --marge plan "x" >/dev/null 2>&1
+    "$SIMPLELLMS" --marge set-status T001 in_progress >/dev/null 2>&1
+    "$SIMPLELLMS" --marge set-status T002 failed >/dev/null 2>&1
+
+    local out; out="$("$SIMPLELLMS" --marge export - 2>/dev/null)"
+    jq empty <<<"$out" 2>/dev/null
+    assert_exit_code 0 "$?" "export - should print valid JSON to stdout"
+
+    # Task Master tagged layout with int ids
+    local ids; ids=$(jq -c '[.master.tasks[].id]' <<<"$out")
+    assert_eq "[1,2,3]" "$ids" "T001.. should map to int ids 1.."
+    local idtype; idtype=$(jq -r '.master.tasks[0].id | type' <<<"$out")
+    assert_eq "number" "$idtype" "exported ids must be JSON numbers"
+
+    local deps; deps=$(jq -c '.master.tasks[2].dependencies' <<<"$out")
+    assert_eq "[1,2]" "$deps" "dependencies should be int ids"
+
+    # Task Master field names
+    local ts; ts=$(jq -r '.master.tasks[0].testStrategy' <<<"$out")
+    assert_eq "grep -q '<h1>Hello</h1>' index.html" "$ts" "test_strategy should map to testStrategy"
+
+    # status mapping
+    local s1 s2 d2
+    s1=$(jq -r '.master.tasks[0].status' <<<"$out")
+    assert_eq "in-progress" "$s1" "in_progress → in-progress"
+    s2=$(jq -r '.master.tasks[1].status' <<<"$out")
+    assert_eq "pending" "$s2" "failed → pending"
+    d2=$(jq -r '.master.tasks[1].details' <<<"$out")
+    assert_contains "$d2" "failed" "details should note the original marge status"
+    assert_contains "$d2" "Write README.md" "original details must be preserved"
+
+    # every task carries the fields Task Master expects
+    local shape_ok; shape_ok=$(jq '[.master.tasks[] | has("id") and has("title") and has("description") and has("details") and has("testStrategy") and has("priority") and has("dependencies") and has("status") and has("subtasks")] | all' <<<"$out")
+    assert_eq "true" "$shape_ok" "every exported task should have the Task Master fields"
+    local meta_ok; meta_ok=$(jq '.master.metadata | has("created") and has("updated") and has("description")' <<<"$out")
+    assert_eq "true" "$meta_ok" "metadata should have created/updated/description"
+}
+
+test_export_default_path_and_explicit_path() {
+    setup_repo >/dev/null
+    "$SIMPLELLMS" --marge init >/dev/null 2>&1
+    MARGE_ECHO_FIXTURE="$FIX/plan-3-tickets.json" \
+        "$SIMPLELLMS" --marge plan "x" >/dev/null 2>&1
+
+    "$SIMPLELLMS" --marge export >/dev/null 2>&1
+    assert_exit_code 0 "$?" "export with no path should succeed"
+    assert_file_exists ".marge/tasks.json" "default export path should be .marge/tasks.json"
+
+    mkdir -p out
+    "$SIMPLELLMS" --marge export out/tm.json >/dev/null 2>&1
+    assert_exit_code 0 "$?" "export to an explicit path should succeed"
+    assert_file_exists "out/tm.json"
+    local n; n=$(jq '.master.tasks | length' out/tm.json)
+    assert_eq "3" "$n"
+}
+
+test_export_without_epic_fails() {
+    setup_repo >/dev/null
+    "$SIMPLELLMS" --marge init >/dev/null 2>&1
+    "$SIMPLELLMS" --marge export - >/dev/null 2>&1
+    local rc=$?
+    if (( rc == 0 )); then
+        printf "    expected nonzero exit for export with no epic, got 0\n" >&2
+        return 1
+    fi
+}
+
+test_import_export_round_trip_is_idempotent() {
+    setup_repo >/dev/null
+    "$SIMPLELLMS" --marge init >/dev/null 2>&1
+    "$SIMPLELLMS" --marge import "$FIX/taskmaster-sample.json" >/dev/null 2>&1
+    "$SIMPLELLMS" --marge export first.json >/dev/null 2>&1
+    assert_exit_code 0 "$?" "export after import should succeed"
+
+    # import → export must preserve titles, dependencies, statuses and the
+    # subtask structure of the original Task Master file.
+    local proj='[.master.tasks[] | {id, title, status, dependencies, subtasks: [(.subtasks // [])[] | {id, title, status, dependencies}]}]'
+    local want got
+    want=$(jq -c "$proj" "$FIX/taskmaster-sample.json")
+    got=$(jq -c "$proj" first.json)
+    assert_eq "$want" "$got" "round-trip should preserve titles/deps/statuses/subtasks"
+
+    # details/testStrategy/priority/description survive too
+    local proj2='[.master.tasks[] | {description, details, testStrategy, priority}]'
+    want=$(jq -c "$proj2" "$FIX/taskmaster-sample.json")
+    got=$(jq -c "$proj2" first.json)
+    assert_eq "$want" "$got" "round-trip should preserve description/details/testStrategy/priority"
+
+    # Idempotence: re-importing our own export and exporting again yields
+    # the same tasks (and the same epic title, carried in metadata.marge).
+    local title1; title1=$(jq -r '.meta.title' .marge/epic.json)
+    "$SIMPLELLMS" --marge import first.json >/dev/null 2>&1
+    assert_exit_code 0 "$?" "re-import of our own export should succeed"
+    local title2; title2=$(jq -r '.meta.title' .marge/epic.json)
+    assert_eq "$title1" "$title2" "epic title should survive export → import"
+
+    "$SIMPLELLMS" --marge export second.json >/dev/null 2>&1
+    want=$(jq -c '.master.tasks' first.json)
+    got=$(jq -c '.master.tasks' second.json)
+    assert_eq "$want" "$got" "export → import → export should be a fixed point"
+}
+
+# ========================================================================
 #  next / set-status — the dependency logic
 # ========================================================================
 

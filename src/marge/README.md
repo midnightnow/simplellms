@@ -57,6 +57,8 @@ simplellms --marge execute
 | `next`                       | Print the next ready ticket id (for scripting) |
 | `show <id>`                  | Full JSON for one ticket |
 | `set-status <id> <status>`   | Manually override a ticket status |
+| `import <tasks.json>`        | Import a Task Master `tasks.json` as the epic (int ids → `T001`, `in-progress` → `in_progress`) |
+| `export [path\|-]`           | Export the epic as Task Master `tasks.json` (default `.marge/tasks.json`; `-` for stdout). `needs_pivot`/`needs_human`/`failed` → `pending` with a note in `details` |
 | `run <id>`                   | Execute one ticket (no review) |
 | `review <id>`                | Re-review an already-executed ticket |
 | `execute`                    | Full orchestrator loop (plan-if-needed → dispatch → review → pivot → repeat) |
