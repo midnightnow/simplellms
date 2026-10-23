@@ -76,7 +76,12 @@ worktree_ensure() {
         git -C "$root" worktree add -b "$branch" "$path" "$start_point" >/dev/null 2>&1 \
             || die "failed to add worktree at $path from $start_point"
     fi
-    git -C "$path" rev-parse HEAD > "$path/.ticket-base" 2>/dev/null || true
+    local base_hash
+    base_hash="$(git -C "$path" rev-parse HEAD 2>/dev/null || true)"
+    if [[ -n "$base_hash" ]]; then
+        mkdir -p "$MARGE_DIR/tickets"
+        printf "%s\n" "$base_hash" > "$MARGE_DIR/tickets/${id}.base"
+    fi
     printf "%s\n" "$path"
 }
 
@@ -91,8 +96,12 @@ worktree_commit() {
         git -C "$path" \
             -c user.name="M.A.R.G.E. Orchestrator" \
             -c user.email="marge@simplellms.local" \
-            commit -m "feat($id): $title" >/dev/null 2>&1 || true
+            commit -m "feat($id): $title" >/dev/null 2>&1 || {
+                err "worktree_commit: failed to commit changes for $id in $path"
+                return 1
+            }
     fi
+    return 0
 }
 
 worktree_merge_into_epic() {
@@ -115,7 +124,7 @@ worktree_reset() {
     local id="$1"
     local path; path="$(worktree_path "$id")"
     [[ -d "$path" ]] || return 0
-    local reset_target; reset_target="$(cat "$path/.ticket-base" 2>/dev/null || cat "$MARGE_DIR/.base-ref" 2>/dev/null || echo "HEAD")"
+    local reset_target; reset_target="$(cat "$MARGE_DIR/tickets/${id}.base" 2>/dev/null || cat "$path/.ticket-base" 2>/dev/null || cat "$MARGE_DIR/.base-ref" 2>/dev/null || echo "HEAD")"
     git -C "$path" reset --hard "$reset_target" >/dev/null 2>&1 || true
     git -C "$path" clean -fd >/dev/null 2>&1 || true
 }
@@ -124,7 +133,7 @@ worktree_diff() {
     local id="$1"
     local path; path="$(worktree_path "$id")"
     [[ -d "$path" ]] || { echo ""; return 0; }
-    local t_base; t_base="$(cat "$path/.ticket-base" 2>/dev/null || cat "$MARGE_DIR/.base-ref" 2>/dev/null || echo "HEAD")"
+    local t_base; t_base="$(cat "$MARGE_DIR/tickets/${id}.base" 2>/dev/null || cat "$path/.ticket-base" 2>/dev/null || cat "$MARGE_DIR/.base-ref" 2>/dev/null || echo "HEAD")"
     # `git add -N` marks every untracked file as "intent to add" without
     # staging content, so subsequent `git diff` reports them as new-file
     # additions. Without this, scaffolding tickets (which create new files

@@ -397,7 +397,12 @@ $(tail -20 "$review_log" 2>/dev/null)
 
     case "$outcome" in
         done)
-            worktree_commit "$id" "$title"
+            if ! worktree_commit "$id" "$title"; then
+                state_append_ticket_log "$id" "review: approved by reviewer, but git commit failed -> needs_human"
+                graph_set_status "$id" "needs_human"
+                warn "  [$id] ! git commit failed -> needs_human"
+                return 0
+            fi
             if ! worktree_merge_into_epic "$id" "$title"; then
                 state_append_ticket_log "$id" "review: approved by reviewer, but merge conflict occurred when integrating into epic branch -> needs_human"
                 graph_set_status "$id" "needs_human"

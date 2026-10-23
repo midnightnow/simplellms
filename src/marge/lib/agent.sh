@@ -157,7 +157,8 @@ agent_run() {
             fi
             ;;
         *)
-            die "unknown MARGE_AGENT='$backend' (expected: claude|gemini|amp|codex|qwen|opencode|goose|aider|local|openrouter|echo)"
+            err "unknown MARGE_AGENT='$backend' (expected: claude|gemini|amp|codex|qwen|opencode|goose|aider|local|openrouter|echo)"
+            return 1
             ;;
     esac
 }
