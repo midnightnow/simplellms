@@ -33,7 +33,7 @@
       "type": "object",
       "required": ["id", "title", "status"],
       "properties": {
-        "id": { "type": "string", "pattern": "^T[0-9]{3,}$", "description": "e.g. T001" },
+        "id": { "type": "string", "pattern": "^T[0-9]{3,}(\\.[0-9]+)?$", "description": "e.g. T001; subtasks use a dotted suffix, e.g. T001.2" },
         "title": { "type": "string" },
         "description": { "type": "string", "description": "one-line summary" },
         "details": { "type": "string", "description": "full markdown spec for the ticket" },

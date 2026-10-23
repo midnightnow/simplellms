@@ -163,6 +163,102 @@ test_summary_includes_counts() {
 }
 
 # ========================================================================
+#  expand — subtask expansion
+# ========================================================================
+
+test_expand_prompt_exists() {
+    assert_file_exists "$SIMPLELLMS_ROOT/src/marge/prompts/expand.md" "prompts/expand.md should exist"
+    local content; content="$(cat "$SIMPLELLMS_ROOT/src/marge/prompts/expand.md")"
+    assert_contains "$content" '"subtasks"' "expand.md should document the subtasks[] output contract"
+    assert_contains "$content" "{{TICKET_ID}}" "expand.md should template the ticket id"
+    assert_contains "$content" "{{ACCEPTANCE_CRITERIA}}" "expand.md should template acceptance criteria"
+}
+
+test_expand_writes_subtasks_array() {
+    setup_repo >/dev/null
+    "$SIMPLELLMS" --marge init >/dev/null 2>&1
+    MARGE_ECHO_FIXTURE="$FIX/plan-3-tickets.json" \
+        "$SIMPLELLMS" --marge plan "x" >/dev/null 2>&1
+
+    MARGE_ECHO_FIXTURE="$FIX/expand-2-subtasks.json" \
+        "$SIMPLELLMS" --marge expand T001 >/dev/null 2>&1
+    assert_exit_code 0 "$?" "expand should succeed with a canned fixture"
+
+    local n; n=$(jq '.tickets[] | select(.id=="T001") | .subtasks | length' .marge/epic.json)
+    assert_eq "2" "$n" "T001 should have 2 subtasks"
+
+    local first; first=$(jq -r '.tickets[] | select(.id=="T001") | .subtasks[0].id' .marge/epic.json)
+    assert_eq "T001.1" "$first" "subtask ids should be dotted under the parent"
+
+    local pending; pending=$(jq '[.tickets[] | select(.id=="T001") | .subtasks[] | select(.status=="pending")] | length' .marge/epic.json)
+    assert_eq "2" "$pending" "all subtasks should start pending"
+
+    # siblings must be untouched
+    local other; other=$(jq '.tickets[] | select(.id=="T002") | .subtasks // [] | length' .marge/epic.json)
+    assert_eq "0" "$other" "expand must not touch other tickets"
+
+    # top-level graph shape is preserved
+    local total; total=$(jq '.tickets | length' .marge/epic.json)
+    assert_eq "3" "$total" "expand must not add top-level tickets"
+}
+
+test_expand_unknown_ticket_fails() {
+    setup_repo >/dev/null
+    "$SIMPLELLMS" --marge init >/dev/null 2>&1
+    MARGE_ECHO_FIXTURE="$FIX/plan-3-tickets.json" \
+        "$SIMPLELLMS" --marge plan "x" >/dev/null 2>&1
+
+    MARGE_ECHO_FIXTURE="$FIX/expand-2-subtasks.json" \
+        "$SIMPLELLMS" --marge expand T999 >/dev/null 2>&1
+    local rc=$?
+    if (( rc == 0 )); then
+        printf "    expected nonzero exit for unknown ticket id, got 0\n" >&2
+        return 1
+    fi
+}
+
+test_list_renders_subtasks_indented_under_parent() {
+    setup_repo >/dev/null
+    "$SIMPLELLMS" --marge init >/dev/null 2>&1
+    MARGE_ECHO_FIXTURE="$FIX/plan-3-tickets.json" \
+        "$SIMPLELLMS" --marge plan "x" >/dev/null 2>&1
+    MARGE_ECHO_FIXTURE="$FIX/expand-2-subtasks.json" \
+        "$SIMPLELLMS" --marge expand T001 >/dev/null 2>&1
+
+    local out; out="$("$SIMPLELLMS" --marge list 2>&1)"
+    assert_contains "$out" "T001.1" "list should show first subtask"
+    assert_contains "$out" "T001.2" "list should show second subtask"
+    assert_contains "$out" "└─" "subtasks should be rendered with an indent marker"
+
+    # subtask lines must be indented deeper than their parent line
+    local parent_line sub_line
+    parent_line="$(grep -E ' T001 ' <<<"$out" | head -1)"
+    sub_line="$(grep -F 'T001.1' <<<"$out" | head -1)"
+    local parent_indent sub_indent
+    parent_indent="${parent_line%%[^ ]*}"; parent_indent=${#parent_indent}
+    sub_indent="${sub_line%%[^ ]*}";       sub_indent=${#sub_indent}
+    if (( sub_indent <= parent_indent )); then
+        printf "    subtask line should be indented deeper than parent (parent=%d sub=%d)\n" "$parent_indent" "$sub_indent" >&2
+        return 1
+    fi
+
+    # ordering: parent row precedes its subtasks, and T002 comes after them
+    local p s2 t2
+    p="$(grep -nE ' T001 ' <<<"$out" | head -1 | cut -d: -f1)"
+    s2="$(grep -nF 'T001.2' <<<"$out" | head -1 | cut -d: -f1)"
+    t2="$(grep -nE ' T002 ' <<<"$out" | head -1 | cut -d: -f1)"
+    if ! (( p < s2 && s2 < t2 )); then
+        printf "    subtasks should sit between parent and next ticket (T001=%s T001.2=%s T002=%s)\n" "$p" "$s2" "$t2" >&2
+        return 1
+    fi
+}
+
+test_help_lists_expand_verb() {
+    local out; out="$("$SIMPLELLMS" --marge help 2>&1)"
+    assert_contains "$out" "marge expand" "help should list expand verb"
+}
+
+# ========================================================================
 #  next / set-status — the dependency logic
 # ========================================================================
 

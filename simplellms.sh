@@ -67,7 +67,7 @@ case "${1:-}" in
             exit 1
         fi
         case "${1:-}" in
-            init|plan|parse|list|ls|next|show|set-status|run|review|execute|go|summary|prune|help|-h|--help|"")
+            init|plan|parse|list|ls|next|show|set-status|expand|run|review|execute|go|summary|prune|help|-h|--help|"")
                 exec "$MARGE_SCRIPT" "$@"
                 ;;
             *)
