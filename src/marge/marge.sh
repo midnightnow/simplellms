@@ -9,7 +9,9 @@
 #   marge next                           print the next ready ticket id
 #   marge show <id>                      print one ticket's full details
 #   marge set-status <id> <status>       manually set a ticket's status
-#   marge expand <id>                    break a ticket into subtasks (TODO v0.2)
+#   marge expand <id>                    break a ticket into subtasks (writes .subtasks[])
+#   marge import <tasks.json>            import a Task Master tasks.json as the epic
+#   marge export [path|-]                export the epic as Task Master tasks.json (default .marge/tasks.json)
 #   marge run <id>                       execute one specific ticket (no review)
 #   marge review <id>                    re-run review on an already-executed ticket
 #   marge execute                        full orchestrator loop: plan(if needed) → dispatch → review → repeat
@@ -17,7 +19,8 @@
 #   marge prune                          remove all marge worktrees (destructive)
 #
 # Env vars:
-#   MARGE_AGENT          claude | gemini | amp | echo      (default: claude)
+#   MARGE_AGENT          claude | gemini | amp | codex | qwen | opencode | goose | aider | local | openrouter | echo (default: claude)
+#   MARGE_REVIEW_AGENT   optional override for review step (default: $MARGE_AGENT)
 #   MARGE_CONCURRENCY    max parallel tickets per batch     (default: 1)
 #   MARGE_MAX_PIVOTS     pivots allowed per ticket          (default: 1)
 #   MARGE_ROOT           state dir name inside repo         (default: .marge)
@@ -30,6 +33,8 @@ source "$MARGE_SRC_DIR/lib/state.sh"
 source "$MARGE_SRC_DIR/lib/graph.sh"
 source "$MARGE_SRC_DIR/lib/worktree.sh"
 source "$MARGE_SRC_DIR/lib/agent.sh"
+source "$MARGE_SRC_DIR/lib/taskmaster.sh"
+source "$MARGE_SRC_DIR/lib/schema.sh"
 
 usage() {
     cat >&2 <<'EOF'
@@ -43,9 +48,12 @@ Usage:
   marge next
   marge show <ticket-id>
   marge set-status <ticket-id> <status>
+  marge expand <ticket-id>
+  marge import <tasks.json>
+  marge export [path|-]
   marge run <ticket-id>
   marge review <ticket-id>
-  marge execute [--concurrency N] [--agent claude|gemini|amp|echo]
+  marge execute [--concurrency N] [--agent claude|gemini|amp|codex|qwen|opencode|goose|aider|local|openrouter|echo]
   marge summary
   marge prune
 
@@ -107,8 +115,16 @@ cmd_plan() {
     ' <<<"$json")"
 
     state_write_epic_json "$json"
+    write_ticket_mds "$json"
 
-    # write per-ticket md files
+    state_log "plan: $(jq '.tickets | length' <<<"$json") tickets"
+    ok "planned $(jq '.tickets | length' <<<"$json") tickets"
+    cmd_list
+}
+
+# write_ticket_mds <epic-json> — (re)write .marge/tickets/<ID>.md for every ticket
+write_ticket_mds() {
+    local json="$1"
     jq -c '.tickets[]' <<<"$json" | while read -r t; do
         local id title details crit
         id=$(jq -r '.id' <<<"$t")
@@ -123,10 +139,64 @@ ${details}
 ${crit}
 "
     done
+}
 
-    state_log "plan: $(jq '.tickets | length' <<<"$json") tickets"
-    ok "planned $(jq '.tickets | length' <<<"$json") tickets"
+cmd_import() {
+    require_cmd git jq python3
+    require_git_repo
+    state_init
+    worktree_record_base
+
+    local src="${1:-}"
+    [[ -z "$src" ]] && die "usage: marge import <path/to/tasks.json>"
+    [[ -f "$src" ]] || die "file not found: $src"
+    jq empty "$src" 2>/dev/null || die "not valid JSON: $src"
+
+    local base title slug
+    base="$(basename "$src")"; base="${base%.json}"
+    title="$(taskmaster_default_title "$src" "Task Master: $base")"
+    slug="$(slugify <<<"$title")"
+    [[ -z "$slug" ]] && slug="taskmaster-import"
+
+    step "importing Task Master tasks from $src"
+    local json
+    json="$(taskmaster_to_epic "$src" "$title" "$slug" "$src")" || die "could not translate $src"
+    local n; n=$(jq '.tickets | length' <<<"$json")
+    (( n > 0 )) || die "no tasks found in $src (expected .tasks[] or .master.tasks[])"
+
+    # fail loud before touching state if the translated graph is off-schema
+    local tmp; tmp="$(mktemp -t marge-import.XXXXXX)"
+    printf "%s" "$json" > "$tmp"
+    if ! schema_validate_epic "$tmp"; then
+        rm -f "$tmp"
+        die "imported epic failed epic.schema.json validation"
+    fi
+    rm -f "$tmp"
+
+    state_write_epic_md "Imported from Task Master: $src"
+    state_write_epic_json "$json"
+    write_ticket_mds "$json"
+
+    state_log "import: $n tickets from $src"
+    ok "imported $n ticket(s) from $src"
     cmd_list
+}
+
+cmd_export() {
+    state_init
+    state_epic_exists || die "no epic planned. run 'marge plan', 'marge parse' or 'marge import' first."
+
+    local dest="${1:-$MARGE_DIR/tasks.json}"
+    local json
+    json="$(epic_to_taskmaster "$MARGE_DIR/epic.json")" || die "could not translate $MARGE_DIR/epic.json"
+
+    if [[ "$dest" == "-" ]]; then
+        printf "%s\n" "$json"
+        return 0
+    fi
+    printf "%s\n" "$json" > "$dest"
+    state_log "export: $(jq '.master.tasks | length' <<<"$json") tasks → $dest"
+    ok "exported $(jq '.master.tasks | length' <<<"$json") task(s) to $dest"
 }
 
 cmd_parse() {
@@ -166,6 +236,62 @@ cmd_set_status() {
     ok "$id → $status"
 }
 
+cmd_expand() {
+    state_init
+    state_epic_exists || die "no epic planned. run 'marge plan' or 'marge parse' first."
+    local id="$1"
+    [[ -z "$id" ]] && die "usage: marge expand <ticket-id>"
+
+    local title details crit strategy
+    title=$(graph_title "$id")
+    [[ -z "$title" || "$title" == "null" ]] && die "unknown ticket: $id"
+    details=$(jq -r --arg id "$id" '.tickets[] | select(.id==$id) | .details // .spec // ""' "$MARGE_DIR/epic.json")
+    crit=$(graph_acceptance "$id")
+    strategy=$(jq -r --arg id "$id" '.tickets[] | select(.id==$id) | .test_strategy // ""' "$MARGE_DIR/epic.json")
+
+    local epic_title epic_desc
+    epic_title=$(jq -r '.meta.title' "$MARGE_DIR/epic.json")
+    epic_desc=$(jq -r '.meta.description // ""' "$MARGE_DIR/epic.json")
+
+    step "expanding $id with $MARGE_AGENT"
+    local prompt
+    prompt=$(render_prompt "$MARGE_SRC_DIR/prompts/expand.md" \
+        "EPIC_TITLE=$epic_title" \
+        "EPIC_DESC=$epic_desc" \
+        "TICKET_ID=$id" \
+        "TICKET_TITLE=$title" \
+        "TICKET_DETAILS=$details" \
+        "ACCEPTANCE_CRITERIA=$crit" \
+        "TEST_STRATEGY=$strategy")
+
+    local expand_log="$MARGE_DIR/tickets/${id}.expand.log"
+    : > "$expand_log"
+    local json
+    json="$(MARGE_AGENT_LOG="$expand_log" agent_run_json "$prompt")" || die "expander returned invalid JSON (see $expand_log)"
+
+    # normalise: subtasks[] must be an array; ids dotted under the parent
+    # (T001.1, T001.2, …) when missing; status=pending; pivots=0.
+    local subtasks
+    subtasks="$(jq -c --arg id "$id" '
+        (.subtasks // []) | to_entries | map(
+            .key as $i | .value
+            | .id = (if (.id|type)=="string" and (.id|length)>0 then .id else ($id + "." + (($i+1)|tostring)) end)
+            | .status = (.status // "pending")
+            | .pivots = (.pivots // 0)
+            | .dependencies = (.dependencies // [])
+        )
+    ' <<<"$json" 2>/dev/null)" || die "expander response has no usable subtasks[]"
+    local n; n=$(jq 'length' <<<"$subtasks")
+    (( n > 0 )) || die "expander returned an empty subtasks[] for $id"
+
+    graph_set_subtasks "$id" "$subtasks"
+    state_append_ticket_log "$id" "expand: $n subtask(s) via $MARGE_AGENT
+$(jq -r '.[] | "- " + .id + " — " + .title' <<<"$subtasks")"
+    state_log "expand: $id → $n subtasks"
+    ok "expanded $id into $n subtask(s)"
+    cmd_list
+}
+
 cmd_run() {
     state_init
     local id="$1"
@@ -200,10 +326,12 @@ cmd_run() {
         "TEST_STRATEGY=$strategy")
 
     info "  [$id] executing in $wt"
+    local ticket_agent; ticket_agent="$(graph_agent "$id")"
+    local active_agent="${ticket_agent:-$MARGE_AGENT}"
     local agent_log="$MARGE_DIR/tickets/${id}.agent.log"
     : > "$agent_log"
-    if ! MARGE_AGENT_LOG="$agent_log" agent_run "$prompt" "$wt" > "$agent_log.stdout" 2>>"$agent_log"; then
-        state_append_ticket_log "$id" "run: agent invocation failed. tail of $agent_log:
+    if ! MARGE_AGENT_LOG="$agent_log" MARGE_AGENT="$active_agent" agent_run "$prompt" "$wt" "$active_agent" > "$agent_log.stdout" 2>>"$agent_log"; then
+        state_append_ticket_log "$id" "run: agent ($active_agent) invocation failed. tail of $agent_log:
 \`\`\`
 $(tail -20 "$agent_log" 2>/dev/null)
 \`\`\`"
@@ -211,8 +339,8 @@ $(tail -20 "$agent_log" 2>/dev/null)
         return 1
     fi
 
-    state_append_ticket_log "$id" "run: agent completed"
-    ok "  [$id] agent completed"
+    state_append_ticket_log "$id" "run: agent ($active_agent) completed"
+    ok "  [$id] agent ($active_agent) completed"
     # status stays in_progress; review step decides final
 }
 
@@ -247,12 +375,13 @@ cmd_review() {
         "DIFF=$diff" \
         "BLOCK_NOTE=$block")
 
-    info "  [$id] reviewing"
+    local review_agent="${MARGE_REVIEW_AGENT:-$MARGE_AGENT}"
+    info "  [$id] reviewing (agent=$review_agent)"
     local review_log="$MARGE_DIR/tickets/${id}.review.log"
     : > "$review_log"
     local verdict
-    if ! verdict="$(MARGE_AGENT_LOG="$review_log" agent_run_json "$prompt")"; then
-        state_append_ticket_log "$id" "review: reviewer returned non-JSON → needs_human. tail of $review_log:
+    if ! verdict="$(MARGE_AGENT_LOG="$review_log" MARGE_AGENT="$review_agent" agent_run_json "$prompt")"; then
+        state_append_ticket_log "$id" "review: reviewer ($review_agent) returned non-JSON → needs_human. tail of $review_log:
 \`\`\`
 $(tail -20 "$review_log" 2>/dev/null)
 \`\`\`"
@@ -268,8 +397,20 @@ $(tail -20 "$review_log" 2>/dev/null)
 
     case "$outcome" in
         done)
+            if ! worktree_commit "$id" "$title"; then
+                state_append_ticket_log "$id" "review: approved by reviewer, but git commit failed -> needs_human"
+                graph_set_status "$id" "needs_human"
+                warn "  [$id] ! git commit failed -> needs_human"
+                return 0
+            fi
+            if ! worktree_merge_into_epic "$id" "$title"; then
+                state_append_ticket_log "$id" "review: approved by reviewer, but merge conflict occurred when integrating into epic branch -> needs_human"
+                graph_set_status "$id" "needs_human"
+                warn "  [$id] ! merge conflict integrating into epic branch -> needs_human"
+                return 0
+            fi
             graph_set_status "$id" "done"
-            ok "  [$id] ✓ done"
+            ok "  [$id] ✓ done (committed and integrated into $(worktree_epic_branch))"
             ;;
         needs_pivot)
             graph_set_status "$id" "needs_pivot"
@@ -325,11 +466,13 @@ cmd_pivot() {
         "DIFF=$diff" \
         "PIVOT_HINT=$hint")
 
-    info "  [$id] pivoting (attempt $((pivots + 1)))"
+    local ticket_agent; ticket_agent="$(graph_agent "$id")"
+    local active_agent="${ticket_agent:-$MARGE_AGENT}"
+    info "  [$id] pivoting (attempt $((pivots + 1)), agent=$active_agent)"
     local pivot_log="$MARGE_DIR/tickets/${id}.pivot.log"
     : > "$pivot_log"
-    if ! MARGE_AGENT_LOG="$pivot_log" agent_run "$prompt" "$wt" > "$pivot_log.stdout" 2>>"$pivot_log"; then
-        state_append_ticket_log "$id" "pivot: agent failed. tail of $pivot_log:
+    if ! MARGE_AGENT_LOG="$pivot_log" MARGE_AGENT="$active_agent" agent_run "$prompt" "$wt" "$active_agent" > "$pivot_log.stdout" 2>>"$pivot_log"; then
+        state_append_ticket_log "$id" "pivot: agent ($active_agent) failed. tail of $pivot_log:
 \`\`\`
 $(tail -20 "$pivot_log" 2>/dev/null)
 \`\`\`"
@@ -431,6 +574,10 @@ cmd_summary() {
     graph_render_tree
     local s; s=$(state_summary)
     printf "\n  %b%s%b\n" "$C_BOLD" "$s" "$C_RESET" >&2
+    local epic_branch; epic_branch="$(worktree_epic_branch 2>/dev/null || echo "")"
+    if [[ -n "$epic_branch" ]]; then
+        dim "  epic branch: $epic_branch"
+    fi
     local needs_human; needs_human=$(jq -r '.tickets[] | select(.status=="needs_human") | .id' "$MARGE_DIR/epic.json")
     if [[ -n "$needs_human" ]]; then
         warn "needs human review: $(tr '\n' ' ' <<<"$needs_human")"
@@ -472,6 +619,9 @@ main() {
         next)        cmd_next ;;
         show)        cmd_show "${passthrough[@]:-}" ;;
         set-status)  cmd_set_status "${passthrough[@]:-}" ;;
+        expand)      cmd_expand "${passthrough[@]:-}" ;;
+        import)      cmd_import "${passthrough[@]:-}" ;;
+        export)      cmd_export "${passthrough[@]:-}" ;;
         run)         cmd_run "${passthrough[@]:-}" ;;
         review)      cmd_review "${passthrough[@]:-}" ;;
         execute|go)  cmd_execute ;;

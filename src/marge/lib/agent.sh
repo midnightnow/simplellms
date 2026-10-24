@@ -13,6 +13,19 @@ source "$(dirname "${BASH_SOURCE[0]}")/common.sh"
 
 : "${MARGE_TIMEOUT:=600}"
 
+# Claude Code's `-p` (headless) mode prompts for permission on every file
+# write and shell command, which can never resolve when there's no human
+# at the terminal. For autonomous orchestration we set the permission
+# mode to `bypassPermissions` by default — this is acceptable because
+# every ticket runs in an isolated git worktree, so the blast radius is
+# bounded to a throwaway branch the user reviews before merging. Users
+# who prefer the safer `acceptEdits` mode (auto-accepts file edits but
+# still prompts for shell commands) can override.
+: "${MARGE_CLAUDE_PERMISSION_MODE:=bypassPermissions}"
+: "${MARGE_LOCAL_URL:=http://localhost:1234/v1}"
+: "${MARGE_LOCAL_MODEL:=qwen3.6-27b}"
+: "${MARGE_LOCAL_API_KEY:=lm-studio}"
+
 # Pick whichever timeout binary is on PATH: GNU `timeout` on Linux,
 # `gtimeout` on macOS with coreutils-from-Homebrew, or empty on bare macOS.
 # If empty, we skip the timeout — the safety net is lost but the tool still
@@ -45,25 +58,89 @@ _agent_exec() {
     esac
 }
 
-# agent_run <prompt-text> [cwd]
+# agent_run <prompt-text> [cwd] [agent-override]
 # prints agent response to stdout. cwd defaults to current directory.
 agent_run() {
     local prompt="$1"
     local cwd="${2:-$PWD}"
+    local backend="${3:-$MARGE_AGENT}"
 
-    case "$MARGE_AGENT" in
+    case "$backend" in
         claude)
             command -v claude >/dev/null 2>&1 \
                 || die "MARGE_AGENT=claude but 'claude' CLI not found. install Claude Code or set MARGE_AGENT=echo"
-            _agent_exec "claude -p --output-format text" "$cwd" "$prompt"
+            _agent_exec "claude -p --output-format text --permission-mode $MARGE_CLAUDE_PERMISSION_MODE" "$cwd" "$prompt"
             ;;
         gemini)
             command -v gemini >/dev/null 2>&1 || die "gemini CLI not found"
-            _agent_exec "gemini" "$cwd" "$prompt"
+            # Headless gemini refuses to run in an untrusted dir (every fresh
+            # worktree is untrusted); `env` because _agent_exec word-splits
+            # $cmd, so a bare VAR=val prefix would be treated as a command.
+            # NOTE (2026-10-16): the personal-OAuth free tier is gone
+            # ("IneligibleTierError ... migrate to Antigravity"); set
+            # GEMINI_API_KEY (AI Studio) or this backend dies at auth.
+            _agent_exec "env GEMINI_CLI_TRUST_WORKSPACE=true gemini -p '' --yolo" "$cwd" "$prompt"
             ;;
         amp)
             command -v amp >/dev/null 2>&1 || die "amp CLI not found"
             _agent_exec "amp" "$cwd" "$prompt"
+            ;;
+        codex)
+            command -v codex >/dev/null 2>&1 || die "codex CLI not found"
+            _agent_exec "codex exec --approve-for-me -" "$cwd" "$prompt"
+            ;;
+        qwen)
+            command -v qwen >/dev/null 2>&1 || die "qwen CLI not found"
+            _agent_exec "qwen -p '' --yolo" "$cwd" "$prompt"
+            ;;
+        opencode)
+            command -v opencode >/dev/null 2>&1 || die "opencode CLI not found"
+            _agent_exec "opencode run" "$cwd" "$prompt"
+            ;;
+        goose)
+            command -v goose >/dev/null 2>&1 || die "goose CLI not found"
+            _agent_exec "goose run -i -" "$cwd" "$prompt"
+            ;;
+        aider)
+            command -v aider >/dev/null 2>&1 || die "aider CLI not found"
+            local msg_tmp
+            msg_tmp="$(mktemp -t marge-aider-msg.XXXXXX)"
+            printf "%s" "$prompt" > "$msg_tmp"
+            local rc=0
+            _agent_exec "aider --yes-always --no-auto-commits --message-file $msg_tmp" "$cwd" "" || rc=$?
+            rm -f "$msg_tmp"
+            return "$rc"
+            ;;
+        local)
+            # Local model execution (safe for clinic/patient data residency).
+            # Prefers codex --oss (LM Studio) or aider against $MARGE_LOCAL_URL,
+            # falling back to direct OpenAI-compatible HTTP chat completions.
+            if command -v codex >/dev/null 2>&1 && [[ "$PWD" != "$cwd" || -d "$cwd/.git" || -f "$cwd/.git" ]]; then
+                _agent_exec "codex exec --oss --local-provider lmstudio -m $MARGE_LOCAL_MODEL --approve-for-me -" "$cwd" "$prompt"
+            else
+                local payload
+                payload="$(jq -n --arg model "$MARGE_LOCAL_MODEL" --arg content "$prompt" \
+                    '{model: $model, temperature: 0.1, messages: [{role: "user", content: $content}]}')"
+                curl -sf -m "$MARGE_TIMEOUT" -X POST "${MARGE_LOCAL_URL%/}/chat/completions" \
+                    -H "Content-Type: application/json" \
+                    -H "Authorization: Bearer $MARGE_LOCAL_API_KEY" \
+                    -d "$payload" | jq -r '.choices[0].message.content // empty'
+            fi
+            ;;
+        openrouter)
+            [[ -n "${OPENROUTER_API_KEY:-}" ]] || die "MARGE_AGENT=openrouter requires OPENROUTER_API_KEY to be set in environment"
+            local model="${MARGE_MODEL:-anthropic/claude-3.5-sonnet}"
+            local payload
+            payload="$(jq -n --arg model "$model" --arg content "$prompt" \
+                '{model: $model, temperature: 0.1, messages: [{role: "user", content: $content}]}')"
+            local res
+            res="$(curl -sf -m "$MARGE_TIMEOUT" -X POST "https://openrouter.ai/api/v1/chat/completions" \
+                -H "Content-Type: application/json" \
+                -H "Authorization: Bearer $OPENROUTER_API_KEY" \
+                -H "HTTP-Referer: https://github.com/midnightnow/simplellms" \
+                -H "X-Title: SimpleLLMs-MARGE" \
+                -d "$payload")" || die "openrouter API request failed"
+            jq -r '.choices[0].message.content // empty' <<<"$res"
             ;;
         echo)
             # dry-run. If $MARGE_ECHO_FIXTURE points at a file, return its
@@ -73,13 +150,15 @@ agent_run() {
             if [[ -n "${MARGE_ECHO_FIXTURE:-}" && -f "$MARGE_ECHO_FIXTURE" ]]; then
                 cat "$MARGE_ECHO_FIXTURE"
             else
-                printf '{"dry_run":true,"cwd":%s,"prompt_chars":%d}\n' \
+                printf '{"dry_run":true,"agent":%s,"cwd":%s,"prompt_chars":%d}\n' \
+                    "$(jq -Rn --arg a "$backend" '$a')" \
                     "$(jq -Rn --arg c "$cwd" '$c')" \
                     "${#prompt}"
             fi
             ;;
         *)
-            die "unknown MARGE_AGENT='$MARGE_AGENT' (expected: claude|gemini|amp|echo)"
+            err "unknown MARGE_AGENT='$backend' (expected: claude|gemini|amp|codex|qwen|opencode|goose|aider|local|openrouter|echo)"
+            return 1
             ;;
     esac
 }

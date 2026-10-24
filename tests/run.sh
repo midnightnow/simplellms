@@ -163,6 +163,315 @@ test_summary_includes_counts() {
 }
 
 # ========================================================================
+#  expand — subtask expansion
+# ========================================================================
+
+test_expand_prompt_exists() {
+    assert_file_exists "$SIMPLELLMS_ROOT/src/marge/prompts/expand.md" "prompts/expand.md should exist"
+    local content; content="$(cat "$SIMPLELLMS_ROOT/src/marge/prompts/expand.md")"
+    assert_contains "$content" '"subtasks"' "expand.md should document the subtasks[] output contract"
+    assert_contains "$content" "{{TICKET_ID}}" "expand.md should template the ticket id"
+    assert_contains "$content" "{{ACCEPTANCE_CRITERIA}}" "expand.md should template acceptance criteria"
+}
+
+test_expand_writes_subtasks_array() {
+    setup_repo >/dev/null
+    "$SIMPLELLMS" --marge init >/dev/null 2>&1
+    MARGE_ECHO_FIXTURE="$FIX/plan-3-tickets.json" \
+        "$SIMPLELLMS" --marge plan "x" >/dev/null 2>&1
+
+    MARGE_ECHO_FIXTURE="$FIX/expand-2-subtasks.json" \
+        "$SIMPLELLMS" --marge expand T001 >/dev/null 2>&1
+    assert_exit_code 0 "$?" "expand should succeed with a canned fixture"
+
+    local n; n=$(jq '.tickets[] | select(.id=="T001") | .subtasks | length' .marge/epic.json)
+    assert_eq "2" "$n" "T001 should have 2 subtasks"
+
+    local first; first=$(jq -r '.tickets[] | select(.id=="T001") | .subtasks[0].id' .marge/epic.json)
+    assert_eq "T001.1" "$first" "subtask ids should be dotted under the parent"
+
+    local pending; pending=$(jq '[.tickets[] | select(.id=="T001") | .subtasks[] | select(.status=="pending")] | length' .marge/epic.json)
+    assert_eq "2" "$pending" "all subtasks should start pending"
+
+    # siblings must be untouched
+    local other; other=$(jq '.tickets[] | select(.id=="T002") | .subtasks // [] | length' .marge/epic.json)
+    assert_eq "0" "$other" "expand must not touch other tickets"
+
+    # top-level graph shape is preserved
+    local total; total=$(jq '.tickets | length' .marge/epic.json)
+    assert_eq "3" "$total" "expand must not add top-level tickets"
+}
+
+test_expand_unknown_ticket_fails() {
+    setup_repo >/dev/null
+    "$SIMPLELLMS" --marge init >/dev/null 2>&1
+    MARGE_ECHO_FIXTURE="$FIX/plan-3-tickets.json" \
+        "$SIMPLELLMS" --marge plan "x" >/dev/null 2>&1
+
+    MARGE_ECHO_FIXTURE="$FIX/expand-2-subtasks.json" \
+        "$SIMPLELLMS" --marge expand T999 >/dev/null 2>&1
+    local rc=$?
+    if (( rc == 0 )); then
+        printf "    expected nonzero exit for unknown ticket id, got 0\n" >&2
+        return 1
+    fi
+}
+
+test_list_renders_subtasks_indented_under_parent() {
+    setup_repo >/dev/null
+    "$SIMPLELLMS" --marge init >/dev/null 2>&1
+    MARGE_ECHO_FIXTURE="$FIX/plan-3-tickets.json" \
+        "$SIMPLELLMS" --marge plan "x" >/dev/null 2>&1
+    MARGE_ECHO_FIXTURE="$FIX/expand-2-subtasks.json" \
+        "$SIMPLELLMS" --marge expand T001 >/dev/null 2>&1
+
+    local out; out="$("$SIMPLELLMS" --marge list 2>&1)"
+    assert_contains "$out" "T001.1" "list should show first subtask"
+    assert_contains "$out" "T001.2" "list should show second subtask"
+    assert_contains "$out" "└─" "subtasks should be rendered with an indent marker"
+
+    # subtask lines must be indented deeper than their parent line
+    local parent_line sub_line
+    parent_line="$(grep -E ' T001 ' <<<"$out" | head -1)"
+    sub_line="$(grep -F 'T001.1' <<<"$out" | head -1)"
+    local parent_indent sub_indent
+    parent_indent="${parent_line%%[^ ]*}"; parent_indent=${#parent_indent}
+    sub_indent="${sub_line%%[^ ]*}";       sub_indent=${#sub_indent}
+    if (( sub_indent <= parent_indent )); then
+        printf "    subtask line should be indented deeper than parent (parent=%d sub=%d)\n" "$parent_indent" "$sub_indent" >&2
+        return 1
+    fi
+
+    # ordering: parent row precedes its subtasks, and T002 comes after them
+    local p s2 t2
+    p="$(grep -nE ' T001 ' <<<"$out" | head -1 | cut -d: -f1)"
+    s2="$(grep -nF 'T001.2' <<<"$out" | head -1 | cut -d: -f1)"
+    t2="$(grep -nE ' T002 ' <<<"$out" | head -1 | cut -d: -f1)"
+    if ! (( p < s2 && s2 < t2 )); then
+        printf "    subtasks should sit between parent and next ticket (T001=%s T001.2=%s T002=%s)\n" "$p" "$s2" "$t2" >&2
+        return 1
+    fi
+}
+
+test_help_lists_expand_verb() {
+    local out; out="$("$SIMPLELLMS" --marge help 2>&1)"
+    assert_contains "$out" "marge expand" "help should list expand verb"
+}
+
+# ========================================================================
+#  import / export — Task Master bridge
+# ========================================================================
+
+test_help_lists_import_export_verbs() {
+    local out; out="$("$SIMPLELLMS" --marge help 2>&1)"
+    assert_contains "$out" "marge import" "help should list import verb"
+    assert_contains "$out" "marge export" "help should list export verb"
+}
+
+test_import_translates_taskmaster_fixture() {
+    setup_repo >/dev/null
+    "$SIMPLELLMS" --marge init >/dev/null 2>&1
+    "$SIMPLELLMS" --marge import "$FIX/taskmaster-sample.json" >/dev/null 2>&1
+    assert_exit_code 0 "$?" "import should succeed on a valid Task Master file"
+    assert_file_exists ".marge/epic.json"
+    assert_file_exists ".marge/tickets/T001.md" "import should write per-ticket md"
+
+    local n; n=$(jq '.tickets | length' .marge/epic.json)
+    assert_eq "3" "$n" "3 Task Master tasks → 3 tickets"
+
+    # int ids → T-prefixed, zero-padded
+    local ids; ids=$(jq -r '[.tickets[].id] | join(",")' .marge/epic.json)
+    assert_eq "T001,T002,T003" "$ids" "int ids should map to T001.."
+
+    # int dependencies → ticket ids
+    local deps; deps=$(jq -c '.tickets[] | select(.id=="T003") | .dependencies' .marge/epic.json)
+    assert_eq '["T001","T002"]' "$deps" "int dependencies should map to ticket ids"
+
+    # status mapping: in-progress → in_progress, done → done
+    local s2; s2=$(jq -r '.tickets[] | select(.id=="T002") | .status' .marge/epic.json)
+    assert_eq "in_progress" "$s2" "Task Master in-progress → marge in_progress"
+    local s1; s1=$(jq -r '.tickets[] | select(.id=="T001") | .status' .marge/epic.json)
+    assert_eq "done" "$s1"
+
+    # testStrategy → test_strategy
+    local ts; ts=$(jq -r '.tickets[] | select(.id=="T001") | .test_strategy' .marge/epic.json)
+    assert_eq "npm run lint exits 0" "$ts" "testStrategy should map to test_strategy"
+
+    # subtasks: dotted ids under the parent, sibling int deps → dotted ids
+    local sub_ids; sub_ids=$(jq -r '.tickets[] | select(.id=="T001") | [.subtasks[].id] | join(",")' .marge/epic.json)
+    assert_eq "T001.1,T001.2" "$sub_ids" "subtask ids should be dotted under the parent"
+    local sub_dep; sub_dep=$(jq -c '.tickets[] | select(.id=="T001") | .subtasks[1].dependencies' .marge/epic.json)
+    assert_eq '["T001.1"]' "$sub_dep" "subtask int deps should map to sibling dotted ids"
+
+    # meta is populated so list/next/execute work
+    local title slug created
+    title=$(jq -r '.meta.title' .marge/epic.json)
+    slug=$(jq -r '.meta.slug' .marge/epic.json)
+    created=$(jq -r '.meta.created' .marge/epic.json)
+    assert_contains "$title" "taskmaster-sample" "meta.title should derive from the source file"
+    assert_eq "task-master-taskmaster-sample" "$slug" "meta.slug should be a clean slug"
+    assert_eq "2026-10-01T09:00:00Z" "$created" "meta.created should carry over from Task Master metadata"
+
+    # the dependency logic must work on imported graphs: T001 done, T002 in_progress → nothing ready
+    local nxt; nxt="$("$SIMPLELLMS" --marge next 2>/dev/null)"
+    assert_eq "" "$nxt" "T003 waits on in-progress T002"
+}
+
+test_import_passes_epic_schema() {
+    setup_repo >/dev/null
+    "$SIMPLELLMS" --marge init >/dev/null 2>&1
+    "$SIMPLELLMS" --marge import "$FIX/taskmaster-sample.json" >/dev/null 2>&1
+
+    export MARGE_SRC_DIR="$SIMPLELLMS_ROOT/src/marge"
+    source "$SIMPLELLMS_ROOT/src/marge/lib/common.sh"
+    source "$SIMPLELLMS_ROOT/src/marge/lib/schema.sh"
+
+    local errs
+    errs="$(schema_validate_epic .marge/epic.json 2>&1)"
+    assert_exit_code 0 "$?" "imported epic.json should pass epic.schema.json: $errs"
+
+    # prove the validator has teeth: a bad id + bad status must be rejected
+    printf '%s' '{"meta":{"id":"x","title":"x","slug":"x","created":"now"},"tickets":[{"id":"bad","title":"t","status":"nope"}]}' > bad.json
+    errs="$(schema_validate_epic bad.json 2>&1 || true)"
+    assert_contains "$errs" "pattern" "validator should reject a non-T ticket id"
+    assert_contains "$errs" "enum" "validator should reject an unknown status"
+    if schema_validate_epic bad.json >/dev/null 2>&1; then
+        printf "    validator accepted an off-schema document\n" >&2
+        return 1
+    fi
+}
+
+test_import_rejects_missing_or_empty_file() {
+    setup_repo >/dev/null
+    "$SIMPLELLMS" --marge init >/dev/null 2>&1
+
+    "$SIMPLELLMS" --marge import does-not-exist.json >/dev/null 2>&1
+    local rc=$?
+    if (( rc == 0 )); then
+        printf "    expected nonzero exit for missing file, got 0\n" >&2
+        return 1
+    fi
+
+    echo '{"master":{"tasks":[]}}' > empty.json
+    "$SIMPLELLMS" --marge import empty.json >/dev/null 2>&1
+    rc=$?
+    if (( rc == 0 )); then
+        printf "    expected nonzero exit for a file with no tasks, got 0\n" >&2
+        return 1
+    fi
+    if [[ -f .marge/epic.json ]]; then
+        printf "    failed import must not write epic.json\n" >&2
+        return 1
+    fi
+}
+
+test_export_maps_planned_epic_to_taskmaster_shape() {
+    setup_repo >/dev/null
+    "$SIMPLELLMS" --marge init >/dev/null 2>&1
+    MARGE_ECHO_FIXTURE="$FIX/plan-3-tickets.json" \
+        "$SIMPLELLMS" --marge plan "x" >/dev/null 2>&1
+    "$SIMPLELLMS" --marge set-status T001 in_progress >/dev/null 2>&1
+    "$SIMPLELLMS" --marge set-status T002 failed >/dev/null 2>&1
+
+    local out; out="$("$SIMPLELLMS" --marge export - 2>/dev/null)"
+    jq empty <<<"$out" 2>/dev/null
+    assert_exit_code 0 "$?" "export - should print valid JSON to stdout"
+
+    # Task Master tagged layout with int ids
+    local ids; ids=$(jq -c '[.master.tasks[].id]' <<<"$out")
+    assert_eq "[1,2,3]" "$ids" "T001.. should map to int ids 1.."
+    local idtype; idtype=$(jq -r '.master.tasks[0].id | type' <<<"$out")
+    assert_eq "number" "$idtype" "exported ids must be JSON numbers"
+
+    local deps; deps=$(jq -c '.master.tasks[2].dependencies' <<<"$out")
+    assert_eq "[1,2]" "$deps" "dependencies should be int ids"
+
+    # Task Master field names
+    local ts; ts=$(jq -r '.master.tasks[0].testStrategy' <<<"$out")
+    assert_eq "grep -q '<h1>Hello</h1>' index.html" "$ts" "test_strategy should map to testStrategy"
+
+    # status mapping
+    local s1 s2 d2
+    s1=$(jq -r '.master.tasks[0].status' <<<"$out")
+    assert_eq "in-progress" "$s1" "in_progress → in-progress"
+    s2=$(jq -r '.master.tasks[1].status' <<<"$out")
+    assert_eq "pending" "$s2" "failed → pending"
+    d2=$(jq -r '.master.tasks[1].details' <<<"$out")
+    assert_contains "$d2" "failed" "details should note the original marge status"
+    assert_contains "$d2" "Write README.md" "original details must be preserved"
+
+    # every task carries the fields Task Master expects
+    local shape_ok; shape_ok=$(jq '[.master.tasks[] | has("id") and has("title") and has("description") and has("details") and has("testStrategy") and has("priority") and has("dependencies") and has("status") and has("subtasks")] | all' <<<"$out")
+    assert_eq "true" "$shape_ok" "every exported task should have the Task Master fields"
+    local meta_ok; meta_ok=$(jq '.master.metadata | has("created") and has("updated") and has("description")' <<<"$out")
+    assert_eq "true" "$meta_ok" "metadata should have created/updated/description"
+}
+
+test_export_default_path_and_explicit_path() {
+    setup_repo >/dev/null
+    "$SIMPLELLMS" --marge init >/dev/null 2>&1
+    MARGE_ECHO_FIXTURE="$FIX/plan-3-tickets.json" \
+        "$SIMPLELLMS" --marge plan "x" >/dev/null 2>&1
+
+    "$SIMPLELLMS" --marge export >/dev/null 2>&1
+    assert_exit_code 0 "$?" "export with no path should succeed"
+    assert_file_exists ".marge/tasks.json" "default export path should be .marge/tasks.json"
+
+    mkdir -p out
+    "$SIMPLELLMS" --marge export out/tm.json >/dev/null 2>&1
+    assert_exit_code 0 "$?" "export to an explicit path should succeed"
+    assert_file_exists "out/tm.json"
+    local n; n=$(jq '.master.tasks | length' out/tm.json)
+    assert_eq "3" "$n"
+}
+
+test_export_without_epic_fails() {
+    setup_repo >/dev/null
+    "$SIMPLELLMS" --marge init >/dev/null 2>&1
+    "$SIMPLELLMS" --marge export - >/dev/null 2>&1
+    local rc=$?
+    if (( rc == 0 )); then
+        printf "    expected nonzero exit for export with no epic, got 0\n" >&2
+        return 1
+    fi
+}
+
+test_import_export_round_trip_is_idempotent() {
+    setup_repo >/dev/null
+    "$SIMPLELLMS" --marge init >/dev/null 2>&1
+    "$SIMPLELLMS" --marge import "$FIX/taskmaster-sample.json" >/dev/null 2>&1
+    "$SIMPLELLMS" --marge export first.json >/dev/null 2>&1
+    assert_exit_code 0 "$?" "export after import should succeed"
+
+    # import → export must preserve titles, dependencies, statuses and the
+    # subtask structure of the original Task Master file.
+    local proj='[.master.tasks[] | {id, title, status, dependencies, subtasks: [(.subtasks // [])[] | {id, title, status, dependencies}]}]'
+    local want got
+    want=$(jq -c "$proj" "$FIX/taskmaster-sample.json")
+    got=$(jq -c "$proj" first.json)
+    assert_eq "$want" "$got" "round-trip should preserve titles/deps/statuses/subtasks"
+
+    # details/testStrategy/priority/description survive too
+    local proj2='[.master.tasks[] | {description, details, testStrategy, priority}]'
+    want=$(jq -c "$proj2" "$FIX/taskmaster-sample.json")
+    got=$(jq -c "$proj2" first.json)
+    assert_eq "$want" "$got" "round-trip should preserve description/details/testStrategy/priority"
+
+    # Idempotence: re-importing our own export and exporting again yields
+    # the same tasks (and the same epic title, carried in metadata.marge).
+    local title1; title1=$(jq -r '.meta.title' .marge/epic.json)
+    "$SIMPLELLMS" --marge import first.json >/dev/null 2>&1
+    assert_exit_code 0 "$?" "re-import of our own export should succeed"
+    local title2; title2=$(jq -r '.meta.title' .marge/epic.json)
+    assert_eq "$title1" "$title2" "epic title should survive export → import"
+
+    "$SIMPLELLMS" --marge export second.json >/dev/null 2>&1
+    want=$(jq -c '.master.tasks' first.json)
+    got=$(jq -c '.master.tasks' second.json)
+    assert_eq "$want" "$got" "export → import → export should be a fixed point"
+}
+
+# ========================================================================
 #  next / set-status — the dependency logic
 # ========================================================================
 
@@ -365,6 +674,31 @@ test_agent_failure_paths_write_logs() {
         || { printf "    cmd_pivot doesn't create pivot.log\n" >&2; return 1; }
 }
 
+# worktree_diff must surface untracked files. Pre-fix, scaffolding tickets
+# (which create new files the agent was told NOT to commit) produced an
+# empty diff and review silently marked them failed.
+test_worktree_diff_includes_untracked_files() {
+    setup_repo >/dev/null
+    "$SIMPLELLMS" --marge init >/dev/null 2>&1
+    MARGE_ECHO_FIXTURE="$FIX/plan-3-tickets.json" \
+        "$SIMPLELLMS" --marge plan "x" >/dev/null 2>&1
+
+    # Source the libs so we can call worktree_diff directly
+    export MARGE_DIR="$(pwd)/.marge"
+    export MARGE_SRC_DIR="$SIMPLELLMS_ROOT/src/marge"
+    source "$SIMPLELLMS_ROOT/src/marge/lib/common.sh"
+    source "$SIMPLELLMS_ROOT/src/marge/lib/worktree.sh"
+
+    # Create a worktree for T001 and drop a new file in it
+    local wt; wt="$(worktree_ensure T001)"
+    echo "hello" > "$wt/new-file.txt"
+
+    # diff must include the new file
+    local diff; diff="$(worktree_diff T001)"
+    assert_contains "$diff" "new-file.txt" "untracked file should appear in diff"
+    assert_contains "$diff" "+hello" "added content should appear in diff"
+}
+
 # Script must resolve its own symlinks so PATH invocation works.
 # Regression test for the bug discovered when setting up ~/.local/bin/simplellms.
 test_script_works_when_invoked_via_symlink() {
@@ -402,6 +736,93 @@ test_failed_jq_mutation_does_not_truncate_epic_json() {
         return 1
     fi
     mv .marge/epic.json.bak .marge/epic.json
+}
+
+# ========================================================================
+#  multi-agent routing (codex, qwen, opencode, goose, aider, local)
+# ========================================================================
+
+test_new_agent_backends_are_wired() {
+    local agent_sh="$SIMPLELLMS_ROOT/src/marge/lib/agent.sh"
+    for b in codex qwen opencode goose aider local openrouter; do
+        grep -q "${b})" "$agent_sh" \
+            || { printf "    agent.sh missing %s backend case\n" "$b" >&2; return 1; }
+    done
+}
+
+test_openrouter_backend_fails_fast_without_key() {
+    export MARGE_SRC_DIR="$SIMPLELLMS_ROOT/src/marge"
+    source "$SIMPLELLMS_ROOT/src/marge/lib/common.sh"
+    source "$SIMPLELLMS_ROOT/src/marge/lib/agent.sh"
+
+    local err_out
+    err_out=$(OPENROUTER_API_KEY="" MARGE_AGENT=openrouter agent_run "test" 2>&1 || true)
+    assert_contains "$err_out" "requires OPENROUTER_API_KEY" "openrouter must fail fast without API key"
+}
+
+test_per_ticket_agent_override() {
+    setup_repo >/dev/null
+    "$SIMPLELLMS" --marge init >/dev/null 2>&1
+    MARGE_ECHO_FIXTURE="$FIX/plan-3-tickets.json" \
+        "$SIMPLELLMS" --marge plan "x" >/dev/null 2>&1
+
+    # Set per-ticket agent override on T001 to "echo" while global MARGE_AGENT is something invalid
+    export MARGE_DIR="$(pwd)/.marge"
+    export MARGE_SRC_DIR="$SIMPLELLMS_ROOT/src/marge"
+    source "$SIMPLELLMS_ROOT/src/marge/lib/common.sh"
+    source "$SIMPLELLMS_ROOT/src/marge/lib/graph.sh"
+    graph_set_field T001 agent echo
+
+    local resolved; resolved="$(graph_agent T001)"
+    assert_eq "echo" "$resolved" "graph_agent should return per-ticket agent override"
+
+    # Running T001 with global MARGE_AGENT=nonexistent should still succeed because T001 overrides to echo
+    MARGE_AGENT=nonexistent "$SIMPLELLMS" --marge run T001 >/dev/null 2>&1
+    assert_exit_code 0 "$?" "per-ticket agent=echo should override global MARGE_AGENT"
+}
+
+# ========================================================================
+#  integration: epic branch & worktree lineage
+# ========================================================================
+
+test_downstream_ticket_inherits_upstream_code() {
+    setup_repo >/dev/null
+    "$SIMPLELLMS" --marge init >/dev/null 2>&1
+    MARGE_ECHO_FIXTURE="$FIX/plan-3-tickets.json" \
+        "$SIMPLELLMS" --marge plan "x" >/dev/null 2>&1
+
+    export MARGE_DIR="$(pwd)/.marge"
+    export MARGE_SRC_DIR="$SIMPLELLMS_ROOT/src/marge"
+    source "$SIMPLELLMS_ROOT/src/marge/lib/common.sh"
+    source "$SIMPLELLMS_ROOT/src/marge/lib/graph.sh"
+    source "$SIMPLELLMS_ROOT/src/marge/lib/worktree.sh"
+    source "$SIMPLELLMS_ROOT/src/marge/lib/state.sh"
+    source "$SIMPLELLMS_ROOT/src/marge/lib/agent.sh"
+
+    # 1. T001 creates a file in its worktree
+    local wt1; wt1="$(worktree_ensure T001)"
+    echo "export const MODEL = 'user';" > "$wt1/src-model.ts"
+
+    # 2. Mock a successful review for T001
+    local review_fixture; review_fixture="$(mktemp -t marge-rev.XXXXXX)"
+    echo '{"outcome":"done","reason":"implemented correctly","criteria_results":[{"criterion":"file exists","met":true}]}' > "$review_fixture"
+    MARGE_ECHO_FIXTURE="$review_fixture" "$SIMPLELLMS" --marge review T001 >/dev/null 2>&1
+    rm -f "$review_fixture"
+
+    # Assert T001 is marked done
+    local s1; s1="$(jq -r '.tickets[] | select(.id=="T001") | .status' "$MARGE_DIR/epic.json")"
+    assert_eq "done" "$s1" "T001 status should be done"
+
+    # Assert epic branch has T001's commit
+    local epic_wt; epic_wt="$(worktree_ensure_epic)"
+    assert_file_exists "$epic_wt/src-model.ts" "epic branch should have T001's file"
+
+    # 3. T002 is dispatched into a new worktree
+    local wt2; wt2="$(worktree_ensure T002)"
+    # T002 must inherit T001's file!
+    assert_file_exists "$wt2/src-model.ts" "downstream ticket T002 must inherit T001's file from epic branch"
+    local content; content="$(cat "$wt2/src-model.ts")"
+    assert_contains "$content" "MODEL" "downstream ticket T002 must see upstream content"
 }
 
 # ========================================================================

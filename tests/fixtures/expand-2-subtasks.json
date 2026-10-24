@@ -1,0 +1,26 @@
+{
+  "subtasks": [
+    {
+      "id": "T001.1",
+      "title": "Scaffold index.html",
+      "description": "Create the empty HTML document",
+      "details": "Create index.html with html/head/body skeleton",
+      "acceptance_criteria": ["File index.html exists"],
+      "test_strategy": "test -f index.html",
+      "priority": "high",
+      "dependencies": [],
+      "status": "pending"
+    },
+    {
+      "id": "T001.2",
+      "title": "Add hello heading",
+      "description": "Insert the h1",
+      "details": "Add <h1>Hello</h1> inside body",
+      "acceptance_criteria": ["Contains <h1>Hello</h1>"],
+      "test_strategy": "grep -q '<h1>Hello</h1>' index.html",
+      "priority": "high",
+      "dependencies": ["T001.1"],
+      "status": "pending"
+    }
+  ]
+}
