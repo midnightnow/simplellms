@@ -56,6 +56,7 @@ simplellms --marge execute
 | `list`                       | Render the ticket graph with status icons |
 | `next`                       | Print the next ready ticket id (for scripting) |
 | `show <id>`                  | Full JSON for one ticket |
+| `expand <id>`                | Split one leaf ticket into 2–5 finer-grained sub-tickets and rewire downstream dependencies |
 | `set-status <id> <status>`   | Manually override a ticket status |
 | `import <tasks.json>`        | Import a Task Master `tasks.json` as the epic (int ids → `T001`, `in-progress` → `in_progress`) |
 | `export [path\|-]`           | Export the epic as Task Master `tasks.json` (default `.marge/tasks.json`; `-` for stdout). `needs_pivot`/`needs_human`/`failed` → `pending` with a note in `details` |
@@ -88,7 +89,8 @@ All state lives inside the **target repo**, not inside SimpleLLMs:
 ├── epic.md              # original user-supplied brief (verbatim)
 ├── epic.json            # authoritative ticket graph — validated against schema
 ├── tickets/
-│   └── T001.md          # human-readable per-ticket spec + orchestrator notes
+│   ├── T001.md          # human-readable per-ticket spec + orchestrator notes
+│   └── T001.base        # worktree base commit SHA recorded at creation/reset
 ├── batches/
 │   └── batch-001.json   # each dispatch round + status snapshot
 ├── worktrees/
@@ -148,7 +150,7 @@ Key fields per ticket:
 bash tests/run.sh
 ```
 
-21 tests covering the full verb surface (help, init, plan/parse, list, show, summary, next/set-status dependency logic, routing, schema validity, syntax). Runs with `MARGE_AGENT=echo` and fixtures under `tests/fixtures/` — no LLM calls, no external deps beyond what M.A.R.G.E. already needs (bash, git, jq, python3).
+45 tests covering the full verb surface (help, init, plan/parse, list, show, expand, import/export, summary, next/set-status dependency logic, worktree auto-commit, epic integration branch, routing, schema validity, syntax). Runs with `MARGE_AGENT=echo` and fixtures under `tests/fixtures/` — no LLM calls, no external deps beyond what M.A.R.G.E. already needs (bash, git, jq, python3).
 
 ## Dogfooding
 

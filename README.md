@@ -158,12 +158,15 @@ Task-Master-compatible verbs:
 simplellms --marge init                              # in any git repo
 simplellms --marge plan "<epic>"                     # or: --marge parse ./EPIC.md
 simplellms --marge list                              # ticket graph w/ status
+simplellms --marge expand T001                       # split a complex ticket into 2-5 sub-tickets
+simplellms --marge import ./tasks.json               # import Task Master tasks.json
+simplellms --marge export ./tasks.json               # export epic as Task Master tasks.json
 simplellms --marge execute --concurrency 3           # the whole loop
 simplellms --marge show T001                         # ticket details
 simplellms --marge summary                           # progress dashboard
 ```
 
-State lives in `.marge/` inside the **target** repo (plain JSON + markdown, git-friendly). Pluggable backends: `MARGE_AGENT=claude|gemini|amp|echo`. See [src/marge/README.md](src/marge/README.md) for the full pipeline, schema, and env vars; see [EPIC.md](EPIC.md) for the v0.2 roadmap expressed as a Marge spec sheet.
+State lives in `.marge/` inside the **target** repo (plain JSON + markdown, git-friendly). Pluggable backends: `MARGE_AGENT=claude|gemini|amp|codex|qwen|opencode|goose|aider|local|openrouter|echo`. See [src/marge/README.md](src/marge/README.md) for the full pipeline, schema, and env vars; see [EPIC.md](EPIC.md) for the v0.2 roadmap expressed as a Marge spec sheet.
 
 **Design note.** The classical Blackboard Pattern separates *shared state* (the board) from the *controller* that schedules knowledge sources. That mirror here is deliberate: `.marge/epic.json` is the board; M.A.R.G.E. is the controller; L.I.S.A. / H.O.M.E.R. / M.A.G.G.I.E. / B.A.R.T. are the knowledge sources. The existing SimpleLLMs Blackboard stays in its passive-governance role.
 
